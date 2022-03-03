@@ -27,7 +27,11 @@ class SarsaAgent:
                 raise KeyError("Provide an epsilon")
                 
             # TO DO: Add own code
-            a = np.random.randint(0,self.n_actions) # Replace this with correct action selection
+            b = np.random.random_sample()
+            if b < epsilon:
+                a = np.random.randint(0, self.n_actions)  # Replace this with correct action selection
+            else:
+                a = argmax(self.Q_sa[s])
             
                 
         elif policy == 'softmax':
@@ -35,12 +39,18 @@ class SarsaAgent:
                 raise KeyError("Provide a temperature")
                 
             # TO DO: Add own code
-            a = np.random.randint(0,self.n_actions) # Replace this with correct action selection
+            probs = softmax(self.Q_sa[s], temp)
+            a = np.random.choice(self.n_actions, p=probs)  # Replace this with correct action selection
             
         return a
         
     def update(self,s,a,r,s_next,a_next,done):
         # TO DO: Add own code
+        if done:
+            G = r
+        else:
+            G = r + self.gamma * self.Q_sa[s_next, a_next]
+        self.Q_sa[s, a] = self.Q_sa[s, a] + self.learning_rate * (G - self.Q_sa[s, a])
         pass
         
 def sarsa(n_timesteps, learning_rate, gamma, policy='egreedy', epsilon=None, temp=None, plot=True):
@@ -52,6 +62,23 @@ def sarsa(n_timesteps, learning_rate, gamma, policy='egreedy', epsilon=None, tem
     rewards = []
 
     # TO DO: Write your SARSA algorithm here!
+    time_step = 0
+    s = env.reset()
+    a = pi.select_action(s,policy,epsilon,temp)
+    while time_step<n_timesteps:
+        s_next, r, done = env.step(a)
+        rewards.append(r)
+        a_next = pi.select_action(s_next,policy,epsilon,temp)
+        pi.update(s,a,r,s_next,a_next,done)
+        time_step += 1
+        if done:
+            s = env.reset()
+            a = pi.select_action(s,policy,epsilon,temp)
+        else:
+            s = s_next
+            a = a_next
+
+
     
     # if plot:
     #    env.render(Q_sa=pi.Q_sa,plot_optimal_policy=True,step_pause=0.1) # Plot the Q-value estimates during SARSA execution
@@ -60,7 +87,7 @@ def sarsa(n_timesteps, learning_rate, gamma, policy='egreedy', epsilon=None, tem
 
 
 def test():
-    n_timesteps = 1000
+    n_timesteps = 2000
     gamma = 1.0
     learning_rate = 0.1
 

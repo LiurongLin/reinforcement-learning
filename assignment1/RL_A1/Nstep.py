@@ -65,7 +65,7 @@ class NstepQLearningAgent:
                 # for i in range(m):
                 #     element = self.gamma**i*rewards[t+i]+self.(gamma**m)*m*np.max(self.Q_sa[states[t+i]])
 
-                G_t = np.dot(np.power(self.gamma, power),m_rewards)+self.gamma**m*(np.max(self.Q_sa[states[t+m]]))
+                G_t = np.dot(np.power(self.gamma, power),m_rewards)+(self.gamma**m)*(np.max(self.Q_sa[states[t+m]]))
 
             self.Q_sa[states[t],actions[t]] = self.Q_sa[states[t],actions[t]] + self.learning_rate*(G_t-self.Q_sa[states[t],actions[t]])
 
@@ -81,13 +81,16 @@ def n_step_Q(n_timesteps, max_episode_length, learning_rate, gamma,
     
     env = StochasticWindyGridworld(initialize_model=False)
     pi = NstepQLearningAgent(env.n_states, env.n_actions, learning_rate, gamma, n)
-    rewards = []
-    actions = []
-    states = []
-    time_step = 0
-    # TO DO: Write your n-step Q-learning algorithm here!
 
+    time_step = 0
+
+    # TO DO: Write your n-step Q-learning algorithm here!
+    rewards_all =[]
     while time_step<n_timesteps:
+        rewards = []
+        actions = []
+        states = []
+        done = False
         s = env.reset()
         states.append(s)
         for t in range (max_episode_length):
@@ -97,29 +100,29 @@ def n_step_Q(n_timesteps, max_episode_length, learning_rate, gamma,
             time_step+=1
             states.append(s_next)
             rewards.append(r)
+            rewards_all.append(r)
             if done or time_step==n_timesteps:
-                print("done")
+                print('Done')
                 break
             else:
                 s = s_next
         pi.update(states,actions,rewards,done)
 
-
     
     # if plot:
     #    env.render(Q_sa=pi.Q_sa,plot_optimal_policy=True,step_pause=0.1) # Plot the Q-value estimates during n-step Q-learning execution
 
-    return rewards 
+    return rewards_all
 
 def test():
-    n_timesteps = 10000
+    n_timesteps = 20000
     max_episode_length = 100
     gamma = 1.0
     learning_rate = 0.1
     n = 5
     
     # Exploration
-    policy = 'egreedy' # 'egreedy' or 'softmax' 
+    policy = 'softmax' # 'egreedy' or 'softmax'
     epsilon = 0.1
     temp = 1.0
     
