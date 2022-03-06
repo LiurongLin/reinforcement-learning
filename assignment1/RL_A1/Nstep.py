@@ -102,7 +102,6 @@ def n_step_Q(n_timesteps, max_episode_length, learning_rate, gamma,
             rewards.append(r)
             rewards_all.append(r)
             if done or time_step==n_timesteps:
-                print('Done')
                 break
             else:
                 s = s_next

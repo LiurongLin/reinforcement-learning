@@ -67,7 +67,6 @@ def q_learning(n_timesteps, learning_rate, gamma, policy='egreedy', epsilon=None
         a = pi.select_action(s,policy,epsilon,temp)
         s_next, r, done = env.step(a)
         pi.update(s,a,r,s_next,done)
-        s = s_next
         time_step+=1
         rewards.append(r)
         if done:
@@ -83,8 +82,6 @@ def q_learning(n_timesteps, learning_rate, gamma, policy='egreedy', epsilon=None
             # TO DO: Write your Q-learning algorithm here!
     
     # Plot the Q-value estimates during Q-learning execution
-    print(len(rewards))
-    print(time_step)
     return rewards 
 
 def test():
