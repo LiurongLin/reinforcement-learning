@@ -107,7 +107,9 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=Non
 
         # Initialize the start state
         s, info = env.reset(seed=42, return_info=True)
-        
+
+        rewards = 0
+
         while not done:
             # Select an action with the policy
             a = DQN.select_action(s, policy=policy, epsilon=epsilon, temp=temp)
@@ -115,10 +117,14 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=Non
             # Simulate the environment
             s_next, r, done, info = env.step(a)
 
+            # collect the rewards
+            rewards+=r
+
             # Update the Q network
             DQN.update(s, a, s_next, r, done)
             
             if done:
+                print(rewards)
                 break
             else:
                 s = s_next # Update the state
