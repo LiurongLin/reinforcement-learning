@@ -9,7 +9,7 @@ from Helper import softmax, argmax, linear_anneal
 
 
 class DQN:
-    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.0001, gamma=1.0, with_ep=False,
+    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.001, gamma=0.9, with_ep=True,
                  max_replay_buffer_size=1000):
         
         self.state_shape   = state_shape
@@ -70,49 +70,43 @@ class DQN:
 
         # Densely-connected layers
         self.Qnet.add(tf.keras.layers.Dense(32, activation='sigmoid'))
-        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
-        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
+        self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
 
         # Outputs the expected reward for each action
-        self.Qnet.add(tf.keras.layers.Dense(self.n_actions, activation='relu'))
+        self.Qnet.add(tf.keras.layers.Dense(self.n_actions, activation='linear'))
 
         # Show the architecture of the NN
         self.Qnet.summary()
-        
-    def update(self, s, a, s_next, r, done):
-
-        if self.with_ep:
-            if len(self.replay_buffer) >= self.max_replay_buffer_size:
-                self.replay_buffer.pop(0)
-
-            self.replay_buffer.append((s, a, r, s_next, done))
-
-            sample_idx = np.random.randint(0, min(len(self.replay_buffer), self.max_replay_buffer_size))
-            s, a, r, s_next, done = self.replay_buffer[sample_idx]
     
+    def add_to_replay_buffer(self, s, a, s_next, r, done):
+        
+        if len(self.replay_buffer) >= self.max_replay_buffer_size:
+            self.replay_buffer.pop(0)
+            
+        self.replay_buffer.append((s, a, r, s_next, done))
+        
+    def update(self, s_batch, a_batch, s_next_batch, r_batch, done_batch):
+                
         with tf.GradientTape() as tape:
             tape.watch(self.Qnet.trainable_variables)
             
             # Determine what the Q-values are for state s and s_next
-            Q_s      = self.Qnet(s[None, :])
-            Q_s_next = self.Qnet(s_next[None, :])
-
+            Q_s      = self.Qnet(s_batch)
+            Q_s_next = self.Qnet(s_next_batch)
+            
             # New back-up estimate / target
-            if done:
-                target_q = r
-            else:
-                target_q = r + self.gamma*np.max(Q_s_next)
+            # If done, done_batch[i]==1 so target_q=r
+            target_q = r_batch + (1-done_batch)*self.gamma*np.max(Q_s_next, axis=1)
 
             # Actual q value taking action a
-            predicted_q = Q_s[:, a]
+            predicted_q = tf.gather(Q_s, indices=a_batch, axis=1)
 
             # Calculate the loss
             loss = self.loss_function(target_q, predicted_q)
         
         # Backpropagate the gradient to the network's weights
         gradients = tape.gradient(loss, self.Qnet.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))        
-
+        self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
 
 def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=None):
 
@@ -136,20 +130,36 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=Non
 
             # collect the rewards
             rewards += r
+            
+            if DQN.with_ep:
+                
+                # Store in the replay buffer
+                DQN.add_to_replay_buffer(s, a, s_next, r, done)
+            
+                # Retrieve a sample of data
+                sample_idx = np.random.randint(0, len(DQN.replay_buffer), 
+                                               size=min(64, len(DQN.replay_buffer)))
+                mini_batch = np.array(DQN.replay_buffer)[sample_idx]
+                
+                # Map the mini-batch to separate arrays
+                s_batch, a_batch, r_batch, s_next_batch, done_batch = map(np.array, zip(*mini_batch))
+                
+            else:
+                # Reshape the data
+                s_batch, a_batch, r_batch, s_next_batch, done_batch = s[None,:], a, r, s_next[None,:], np.array(done)
 
             # Update the Q network
-            DQN.update(s, a, s_next, r, done)
+            DQN.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
             
             if done:
-                print(rewards)
                 break
             else:
                 s = s_next # Update the state
-            
-            if episode >= N_episodes*0.8:
-                env.render()
 
         returns.append(rewards)
+        
+        if (episode%100 == 0) and (episode >= 100):
+            print('Mean reward of previous 100 timesteps:', np.mean(returns[-100:]))
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     ax.plot(returns)
