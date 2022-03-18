@@ -9,8 +9,8 @@ from Helper import softmax, argmax, linear_anneal
 
 
 class DQN:
-    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.001, gamma=0.9, with_ep=True,
-                 max_replay_buffer_size=1000):
+    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.01, gamma=0.9, with_ep=True,
+                 max_replay_buffer_size=1000, with_target_network=True):
         
         self.state_shape   = state_shape
         self.n_actions     = n_actions
@@ -30,12 +30,15 @@ class DQN:
         self.with_ep = with_ep
         self.max_replay_buffer_size = max_replay_buffer_size
         self.replay_buffer = []
+        
+        # Use a target network
+        self.with_target_network = with_target_network
 
     def select_action(self, s, policy='egreedy', epsilon=None, temp=None):
         
         # Retrieve the Q-value for each action in state s
         Q_s = self.Qnet.predict(s[None, :])
-        
+
         if policy == 'egreedy':
             # Epsilon-greedy policy
             if epsilon is None:
@@ -46,7 +49,7 @@ class DQN:
                 a = np.random.randint(0, self.n_actions)
             else:
                 # Use greedy policy
-                a = argmax(Q_s)
+                a = argmax(Q_s[0])
                 
         elif policy == 'softmax':
             # Boltzmann policy
@@ -54,7 +57,7 @@ class DQN:
                 raise KeyError("Provide a temperature")
             
             # Sample action with probability from softmax
-            prob = softmax(Q_s, temp)
+            prob = softmax(Q_s[0], temp)
             a = np.random.choice(self.n_actions, p=prob)
             
         return a
@@ -69,7 +72,7 @@ class DQN:
         self.Qnet.add(tf.keras.Input(shape=self.state_shape))
 
         # Densely-connected layers
-        self.Qnet.add(tf.keras.layers.Dense(32, activation='sigmoid'))
+        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
         self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
 
         # Outputs the expected reward for each action
@@ -91,15 +94,20 @@ class DQN:
             tape.watch(self.Qnet.trainable_variables)
             
             # Determine what the Q-values are for state s and s_next
-            Q_s      = self.Qnet(s_batch)
-            Q_s_next = self.Qnet(s_next_batch)
+            Q_s = self.Qnet(s_batch)
+            #print('Q_s in update function:', Q_s[0])
+            
+            if self.with_target_network:
+                Q_s_next = self.Qnet_target(s_next_batch)
+            else:
+                Q_s_next = self.Qnet(s_next_batch)
             
             # New back-up estimate / target
             # If done, done_batch[i]==1 so target_q=r
             target_q = r_batch + (1-done_batch)*self.gamma*np.max(Q_s_next, axis=1)
 
             # Actual q value taking action a
-            predicted_q = tf.gather(Q_s, indices=a_batch, axis=1)
+            predicted_q = tf.reduce_sum(tf.one_hot(a_batch, self.n_actions) * Q_s, axis=1)
 
             # Calculate the loss
             loss = self.loss_function(target_q, predicted_q)
@@ -107,8 +115,8 @@ class DQN:
         # Backpropagate the gradient to the network's weights
         gradients = tape.gradient(loss, self.Qnet.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
-
-def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=None):
+        
+def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.8, temp=None, with_decay=True):
 
     returns = []
 
@@ -121,9 +129,28 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=Non
 
         rewards = 0
 
+        # Create a target network every 20 episodes
+        if DQN.with_target_network and (episode%20 == 0):
+            DQN.Qnet_target = tf.keras.models.clone_model(DQN.Qnet)
+            DQN.Qnet_target.set_weights(DQN.Qnet.get_weights()) 
+            
         while not done:
-            # Select an action with the policy
-            a = DQN.select_action(s, policy=policy, epsilon=epsilon, temp=temp)
+            
+            if with_decay:
+                # Use a decaying epsilon/tau
+                epsilon_new, temp_new = None, None
+                if policy=='egreedy':
+                    epsilon_new = linear_anneal(t=episode, T=N_episodes, start=epsilon, 
+                                                final=0.01, percentage=0.9)
+                elif policy=='softmax':
+                    temp_new = linear_anneal(t=episode, T=N_episodes, start=temp, 
+                                             final=0.01, percentage=0.9)
+                # Sample an action with the policy
+                a = DQN.select_action(s, policy=policy, epsilon=epsilon_new, temp=temp_new)
+            
+            else:
+                # Select an action with the policy
+                a = DQN.select_action(s, policy=policy, epsilon=epsilon, temp=temp)
 
             # Simulate the environment
             s_next, r, done, info = env.step(a)
@@ -146,7 +173,7 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=Non
                 
             else:
                 # Reshape the data
-                s_batch, a_batch, r_batch, s_next_batch, done_batch = s[None,:], a, r, s_next[None,:], np.array(done)
+                s_batch, a_batch, r_batch, s_next_batch, done_batch = s[None,:], np.array(a), np.array(r), s_next[None,:], np.array(done)
 
             # Update the Q network
             DQN.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
