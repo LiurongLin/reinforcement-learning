@@ -77,7 +77,6 @@ class DQN:
         self.Qnet.add(tf.keras.Input(shape=self.state_shape))
 
         # Densely-connected layers
-        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
         self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
 
         # Outputs the expected reward for each action
@@ -136,11 +135,11 @@ class DQN:
         self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
 
 
-def plot_rewards(rewards, save_file=None):
-    steps = np.arange(len(rewards[0]))
-
-    mean_rewards = np.mean(rewards, axis=0)
-    smooth_rewards = smooth(mean_rewards, len(mean_rewards) // 10 + 1)
+def plot_rewards(rewards, config_labels, save_file=None, ):
+    n_steps = len(rewards[0])
+    steps = np.arange(n_steps)
+    smoothing_window = n_steps // 10 + 1
+    n_configs = len(config_labels)
 
     # smooth_rewards = [smooth(r, len(rewards) // 10 + 1) for r in rewards]
     # mean_rewards = np.mean(smooth_rewards, axis=0)
@@ -149,11 +148,15 @@ def plot_rewards(rewards, save_file=None):
     # lower = mean_rewards - std_rewards
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-    ax.plot(steps, smooth_rewards)
+
+    for i in range(n_configs):
+        config_rewards = np.mean(np.array(rewards)[i::n_configs], axis=0)
+        ax.plot(steps, smooth(config_rewards, smoothing_window), label=config_labels[i])
     # ax.fill_between(steps, upper, lower, alpha=0.2)
     ax.set_xlabel('Step')
     ax.set_ylabel('Mean reward')
     ax.set_title('DQN mean reward progression')
+    ax.legend()
     if save_file is not None:
         plt.savefig(save_file)
     plt.show()
@@ -169,7 +172,9 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
 
     # Counters
     step = 0
-    episode = 0
+
+    eps = epsilon
+    t = temp
 
     while step < budget:
 
@@ -179,27 +184,19 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         s = env.reset()
         episode_reward = 0
 
-        # Create a target network every 20 episodes
-        if DQN.with_target_network and (episode % 20 == 0):
+        # Create a target network every 100 steps
+        if DQN.with_target_network and (step % 500 == 0):
             DQN.update_target_network()
 
+        if with_decay:
+            # Use a decaying epsilon/tau
+            if policy == 'egreedy':
+                eps = linear_anneal(t=step, T=budget, start=epsilon, final=0.01, percentage=0.9)
+            elif policy == 'softmax':
+                t = linear_anneal(t=step, T=budget, start=temp, final=0.01, percentage=0.9)
+
         while not done and step < budget:
-
-            if with_decay:
-                # Use a decaying epsilon/tau
-                epsilon_new, temp_new = None, None
-                if policy == 'egreedy':
-                    epsilon_new = linear_anneal(t=step, T=budget, start=epsilon,
-                                                final=0.01, percentage=0.9)
-                elif policy == 'softmax':
-                    temp_new = linear_anneal(t=step, T=budget, start=temp,
-                                             final=0.01, percentage=0.9)
-                # Sample an action with the policy
-                a = DQN.select_action(s, policy=policy, epsilon=epsilon_new, temp=temp_new)
-
-            else:
-                # Select an action with the policy
-                a = DQN.select_action(s, policy=policy, epsilon=epsilon, temp=temp)
+            a = DQN.select_action(s, policy=policy, epsilon=eps, temp=t)
 
             # Simulate the environment
             s_next, r, done, info = env.step(a)
@@ -225,7 +222,6 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
             DQN.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
 
             if done:
-                episode += 1
                 break
             else:
                 s = s_next  # Update the state
@@ -239,7 +235,7 @@ def test(budget, with_ep=False, with_target_network=False):
     # Create the deep Q network
     net = DQN(with_ep=with_ep, with_target_network=with_target_network)
 
-    rewards = train_Qnet(env, net, budget=budget)
+    rewards = train_Qnet(env, net, budget=budget, with_decay=False)
     return rewards
 
 
@@ -252,13 +248,18 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     n_repititions = 8
-    n_budget = 50000
+    n_budget = 10000
     n_cores = 4
 
-    params = [(n_budget, args.experience_replay, args.target_network) for _ in range(n_repititions)]
+    # params = [(n_budget, args.experience_replay, args.target_network) for _ in range(n_repititions)]
+    params = n_repititions * [(n_budget, False, False),
+                              (n_budget, True, False),
+                              (n_budget, False, True),
+                              (n_budget, True, True)]
     pool = Pool(n_cores)
     rewards_per_rep = pool.starmap(test, params)
     pool.close()
     pool.join()
 
-    plot_rewards(rewards_per_rep, save_file='dqn_rewards')
+    labels = ['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn']
+    plot_rewards(rewards_per_rep, config_labels=labels, save_file='dqn_rewards')
