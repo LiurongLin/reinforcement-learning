@@ -1,4 +1,3 @@
-
 import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,7 +9,7 @@ from Helper import softmax, argmax, linear_anneal
 
 
 class DQN:
-    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.0001, gamma=1.0, loss = 'mse',
+    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.0001, gamma=1.0, with_ep=False,
                  max_replay_buffer_size=1000):
 
         self.state_shape = state_shape
@@ -18,21 +17,19 @@ class DQN:
         self.learning_rate = learning_rate
         self.gamma = gamma
 
-        # Initialize the Q network for main and target networks
-        self.Qnet = self.build_model(loss = loss, lr= learning_rate)
-        self.Qnet_target = self.build_model(loss=loss, lr=learning_rate)
-        self.Qnet_target.set_weights(self.Qnet.get_weights())
-        # # Utilise Adam optimizer
-        # self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-        #
-        # # Utilise MSE loss
-        # self.loss_function = tf.keras.losses.MSE
+        # Initialize the Q network
+        self.build_Qnet()
+
+        # Utilise Adam optimizer
+        self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
+
+        # Utilise MSE loss
+        self.loss_function = tf.keras.losses.MSE
 
         # Experience replay
+        self.with_ep = with_ep
         self.max_replay_buffer_size = max_replay_buffer_size
         self.replay_buffer = []
-        self.step = 0
-        self.target_update_counter = 0
 
     def select_action(self, s, policy='egreedy', epsilon=None, temp=None):
 
@@ -49,7 +46,7 @@ class DQN:
                 a = np.random.randint(0, self.n_actions)
             else:
                 # Use greedy policy
-                a = argmax(Q_s)
+                a = argmax(np.squeeze(Q_s))
 
         elif policy == 'softmax':
             # Boltzmann policy
@@ -62,57 +59,62 @@ class DQN:
 
         return a
 
-    def build_model(self, loss='mse', lr=0.001):
-        '''build a deep learning model'''
-        model = tf.keras.Sequential()
+    def build_Qnet(self):
+
+        # Initialize the Q network
+        self.Qnet = tf.keras.Sequential()
 
         # Input-shape is 4: [cart position, cart velocity,
         # pole angle, pole angular velocity]
-        model.add(tf.keras.Input(shape=self.state_shape))
+        self.Qnet.add(tf.keras.Input(shape=self.state_shape))
 
         # Densely-connected layers
-        model.add(tf.keras.layers.Dense(32, activation='sigmoid'))
-        model.add(tf.keras.layers.Dense(64, activation='relu'))
-        model.add(tf.keras.layers.Dense(64, activation='relu'))
+        self.Qnet.add(tf.keras.layers.Dense(32, activation='sigmoid'))
+        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
+        self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
 
         # Outputs the expected reward for each action
-        model.add(tf.keras.layers.Dense(self.n_actions, activation='relu'))
+        self.Qnet.add(tf.keras.layers.Dense(self.n_actions, activation='relu'))
 
-        model.compile(loss=loss, optimizer=tf.keras.optimizers.Adam(lr=lr), metrics=['accuracy'])
         # Show the architecture of the NN
-        model.summary()
-
-        return model
+        self.Qnet.summary()
 
     def update(self, s, a, s_next, r, done):
 
-        if len(self.replay_buffer) >= self.max_replay_buffer_size:
-            self.replay_buffer.pop(0)
+        if self.with_ep:
+            if len(self.replay_buffer) >= self.max_replay_buffer_size:
+                self.replay_buffer.pop(0)
 
-        self.replay_buffer.append((s, a, r, s_next, done))
+            self.replay_buffer.append((s, a, r, s_next, done))
 
-        sample_idx = np.random.randint(0, min(len(self.replay_buffer), self.max_replay_buffer_size))
-        s, a, r, s_next, done = self.replay_buffer[sample_idx]
+            sample_idx = np.random.randint(0, min(len(self.replay_buffer), self.max_replay_buffer_size))
+            s, a, r, s_next, done = self.replay_buffer[sample_idx]
 
+        with tf.GradientTape() as tape:
+            tape.watch(self.Qnet.trainable_variables)
 
-        # Determine what the Q-values are for state s and s_next using two models
-        Q_s = self.Qnet.predict(s[None, :])
-        Q_s_next = self.Qnet_target.predict(s_next[None, :])
+            # Determine what the Q-values are for state s and s_next
+            Q_s = self.Qnet(s[None, :])
+            Q_s_next = self.Qnet(s_next[None, :])
 
             # New back-up estimate / target
-        if done:
-            target_q = r
-        else:
-            target_q = r + self.gamma * np.max(Q_s_next)
+            if done:
+                target_q = r
+            else:
+                target_q = r + self.gamma * np.max(Q_s_next)
 
-        # Update Q value for a given state and action
-        Q_s[:, a] = target_q
-        self.Qnet.fit(s[None,:],Q_s, verbose = False)
+            # Actual q value taking action a
+            predicted_q = Q_s[:, a]
+
+            # Calculate the loss
+            loss = self.loss_function(target_q, predicted_q)
+
+        # Backpropagate the gradient to the network's weights
+        gradients = tape.gradient(loss, self.Qnet.trainable_variables)
+        self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
 
 
-
-
-def train_Qnet(env, DQN, N_episodes=1500, policy='egreedy', epsilon=0.2, temp=None):
+def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.2, temp=None):
     returns = []
 
     for episode in tqdm(range(N_episodes)):
@@ -146,14 +148,7 @@ def train_Qnet(env, DQN, N_episodes=1500, policy='egreedy', epsilon=0.2, temp=No
             if episode >= N_episodes * 0.8:
                 env.render()
 
-        #set the weights of the target network to be the same as the main network for every 6 episodes.
-        DQN.target_update_counter += 1
-        if DQN.target_update_counter > 3:
-            DQN.Qnet_target.set_weights(DQN.Qnet.get_weights())
-            DQN.target_update_counter = 0
-
         returns.append(rewards)
-
 
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     ax.plot(returns)
@@ -175,15 +170,3 @@ def test():
 
 if __name__ == '__main__':
     test()
-
-
-
-
-
-
-
-
-
-
-
-

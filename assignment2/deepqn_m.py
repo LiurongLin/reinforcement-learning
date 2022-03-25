@@ -5,6 +5,8 @@ import gym
 import argparse
 from multiprocessing import Pool
 
+import pandas as pd
+
 from tqdm import tqdm
 
 from Helper import softmax, argmax, linear_anneal, smooth
@@ -163,7 +165,7 @@ def plot_rewards(rewards, config_labels, save_file=None, ):
     plt.close()
 
 
-def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None, with_decay=True):
+def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.05, temp=None, with_decay=False):
     # Store the accumulated reward for each step
     rewards = []
 
@@ -185,7 +187,7 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         episode_reward = 0
 
         # Create a target network every 100 steps
-        if DQN.with_target_network and (step % 500 == 0):
+        if DQN.with_target_network and (step % 50 == 0):
             DQN.update_target_network()
 
         if with_decay:
@@ -236,6 +238,8 @@ def test(budget, with_ep=False, with_target_network=False):
     net = DQN(with_ep=with_ep, with_target_network=with_target_network)
 
     rewards = train_Qnet(env, net, budget=budget, with_decay=False)
+
+
     return rewards
 
 
@@ -247,8 +251,8 @@ parser.add_argument('-t', '--target_network', nargs='?', const=True, default=Fal
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    n_repititions = 8
-    n_budget = 10000
+    n_repititions = 3
+    n_budget = 30000
     n_cores = 4
 
     # params = [(n_budget, args.experience_replay, args.target_network) for _ in range(n_repititions)]
@@ -263,3 +267,5 @@ if __name__ == '__main__':
 
     labels = ['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn']
     plot_rewards(rewards_per_rep, config_labels=labels, save_file='dqn_rewards')
+    rewards_df = pd.DataFrame(np.array(rewards_per_rep).T, columns=['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn'])
+    rewards_df.to_csv('rewards_per_rep.txt')

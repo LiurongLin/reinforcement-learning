@@ -5,7 +5,7 @@ import gym
 
 from tqdm import tqdm
 
-from Helper import softmax, argmax, linear_anneal
+from Helper import softmax, argmax, linear_anneal, smooth
 
 
 class DQN:
@@ -188,6 +188,7 @@ def train_Qnet(env, DQN, N_episodes=500, policy='egreedy', epsilon=0.8, temp=Non
         if (episode%100 == 0) and (episode >= 100):
             print('Mean reward of previous 100 timesteps:', np.mean(returns[-100:]))
 
+    returns = smooth(returns, 10)
     fig, ax = plt.subplots(1, 1, figsize=(8, 8))
     ax.plot(returns)
     ax.set_xlabel('Episode')
