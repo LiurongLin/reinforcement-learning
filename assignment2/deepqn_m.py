@@ -237,7 +237,7 @@ def test(budget, with_ep=False, with_target_network=False):
     # Create the deep Q network
     net = DQN(with_ep=with_ep, with_target_network=with_target_network)
 
-    rewards = train_Qnet(env, net, budget=budget, with_decay=False)
+    rewards = train_Qnet(env, net, budget=budget, with_decay=False, policy='softmax', temp = 1)
 
 
     return rewards
@@ -251,8 +251,8 @@ parser.add_argument('-t', '--target_network', nargs='?', const=True, default=Fal
 if __name__ == '__main__':
     args = parser.parse_args()
 
-    n_repititions = 3
-    n_budget = 30000
+    n_repititions = 2
+    n_budget = 10000
     n_cores = 4
 
     # params = [(n_budget, args.experience_replay, args.target_network) for _ in range(n_repititions)]
@@ -267,5 +267,6 @@ if __name__ == '__main__':
 
     labels = ['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn']
     plot_rewards(rewards_per_rep, config_labels=labels, save_file='dqn_rewards')
-    rewards_df = pd.DataFrame(np.array(rewards_per_rep).T, columns=['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn'])
-    rewards_df.to_csv('rewards_per_rep.txt')
+    # rewards_df = pd.DataFrame(np.array(rewards_per_rep).T, columns=['dqn', 'dqn with ep', 'dqn with tn', 'dqn with ep and tn'])
+    # rewards_df.to_csv('rewards_per_rep.txt')
+    np.savetxt('rewards_per_rep.txt', rewards_per_rep)
