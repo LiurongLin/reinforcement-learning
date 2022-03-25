@@ -13,7 +13,7 @@ do
 			do
 				for temp in 10 1 0.1
 				do
-				python3 deepqn_m.py --experience_replay --target_network --target_update_step $up_step --policy egreedy $pol  --learning_rate $lr --epsilon $eps --temp $temp
+				python3 deepqn_m.py --experience_replay --target_network --target_update_step $up_step --policy $pol  --learning_rate $lr --epsilon $eps --temp $temp
 				
 				done
 			done		
