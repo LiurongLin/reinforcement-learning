@@ -1,20 +1,26 @@
 #! /bin/sh.
 
-python3 deepqn_m.py --experience_replay --target_network --target_update_step 10
-python3 deepqn_m.py --experience_replay --target_network --target_update_step 100
-python3 deepqn_m.py --experience_replay --target_network --target_update_step 1000
 
-python3 deepqn_m.py --experience_replay --target_network --policy egreedy
-python3 deepqn_m.py --experience_replay --target_network --policy softmax
 
-python3 deepqn_m.py --experience_replay --target_network --learning_rate 0.01
-python3 deepqn_m.py --experience_replay --target_network --learning_rate 0.05
-python3 deepqn_m.py --experience_replay --target_network --learning_rate 0.001
 
-python3 deepqn_m.py --experience_replay --target_network --epsilon 0.2
-python3 deepqn_m.py --experience_replay --target_network --epsilon 0.1
-python3 deepqn_m.py --experience_replay --target_network --epsilon 0.05
+for up_step in 10, 100, 1000
+do
+	for pol in egreedy softmax
+	do
+		for eps in 0.2 0.1 0.05
+		do
+			for lr in 0.01 0.05 0.001
+			do
+				for temp in 10 1 0.1
+				do
+				python3 deepqn_m.py --experience_replay --target_network --target_update_step $up_step --policy egreedy $pol  --learning_rate $lr --epsilon $eps --temp $temp
+				
+				done
+			done		
+		done
+	done
+done 
 
-python3 deepqn_m.py --experience_replay --target_network --temp 10
-python3 deepqn_m.py --experience_replay --target_network --temp 1
-python3 deepqn_m.py --experience_replay --target_network --temp 0.1
+
+
+
