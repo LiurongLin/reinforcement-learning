@@ -2,8 +2,7 @@
 
 
 
-
-for up_step in 10, 100, 1000
+for up_step in 10 100 1000
 do
 	for pol in egreedy softmax
 	do
