@@ -2,6 +2,8 @@ import tensorflow as tf
 import numpy as np
 import matplotlib.pyplot as plt
 import gym
+import os
+import glob
 import argparse
 from multiprocessing import Pool
 
@@ -10,7 +12,7 @@ from tqdm import tqdm
 from Helper import softmax, argmax, linear_anneal, smooth
 
 class DQN:
-    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.01, gamma=0.9, with_ep=True,
+    def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.01, gamma=0.9, architecture='32', with_ep=True,
                  max_replay_buffer_size=1000, replay_buffer_batch_size=64, with_target_network=True):
 
         self.state_shape = state_shape
@@ -20,7 +22,7 @@ class DQN:
         self.epsilon = 0.8
 
         # Initialize the Q network
-        self.build_Qnet()
+        self.build_Qnet(architecture)
 
         # Utilise Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
@@ -66,7 +68,7 @@ class DQN:
 
         return a
 
-    def build_Qnet(self):
+    def build_Qnet(self, arc='32'):
 
         # Initialize the Q network
         self.Qnet = tf.keras.Sequential()
@@ -76,8 +78,15 @@ class DQN:
         self.Qnet.add(tf.keras.Input(shape=self.state_shape))
 
         # Densely-connected layers
-        self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
-        self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
+        if arc == '32':
+            self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
+        elif arc == '64':
+            self.Qnet.add(tf.keras.layers.Dense(64, activation='relu'))
+        elif arc == '32_32':
+            self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
+            self.Qnet.add(tf.keras.layers.Dense(32, activation='relu'))
+        else:
+            raise ValueError(f'Architecture {arc} unknown')
 
         # Outputs the expected reward for each action
         self.Qnet.add(tf.keras.layers.Dense(self.n_actions, activation='linear'))
@@ -136,10 +145,9 @@ class DQN:
         self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
 
 
-def plot_rewards(rewards, config_labels, save_file=None, ):
-    n_steps = len(rewards[0])
-    steps = np.arange(n_steps)
-    smoothing_window = n_steps // 10 + 1
+def plot_rewards(rewards, config_labels, budget=10000, save_file=None):
+    steps = np.arange(budget)
+    smoothing_window = budget // 10 + 1
     n_configs = len(config_labels)
 
     # smooth_rewards = [smooth(r, len(rewards) // 10 + 1) for r in rewards]
@@ -151,8 +159,7 @@ def plot_rewards(rewards, config_labels, save_file=None, ):
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     for i in range(n_configs):
-        config_rewards = np.mean(np.array(rewards)[i::n_configs], axis=0)
-        ax.plot(steps, smooth(config_rewards, smoothing_window), label=config_labels[i])
+        ax.plot(steps, smooth(rewards[i], smoothing_window), label=config_labels[i])
     # ax.fill_between(steps, upper, lower, alpha=0.2)
     ax.set_xlabel('Step')
     ax.set_ylabel('Mean reward')
@@ -178,7 +185,6 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
     eps = epsilon
     t = temp
 
-    done = False
     episode_reward = 0
     # Initialize the start state
     s = env.reset()
@@ -195,9 +201,9 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         if with_decay:
             # Use a decaying epsilon/tau
             if policy == 'egreedy':
-                eps = linear_anneal(t=step, T=budget, start=epsilon, final=0.01, percentage=0.9)
+                eps = linear_anneal(t=step, T=budget, start=0.8, final=0.01, percentage=0.9)
             elif policy == 'softmax':
-                t = linear_anneal(t=step, T=budget, start=temp, final=0.01, percentage=0.9)
+                t = linear_anneal(t=step, T=budget, start=20, final=0.05, percentage=0.9)
                 
         # Select an action using the policy
         a = DQN.select_action(s, policy=policy, epsilon=eps, temp=t)
@@ -205,9 +211,8 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         # Simulate the environment
         s_next, r, done, info = env.step(a)
         
-        # Collect the reward of the current episode
+        # Update the reward of the current episode
         episode_reward += r
-        rewards.append(episode_reward)
         
         if DQN.with_ep:
             # Store in the replay buffer
@@ -223,7 +228,10 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         # Update the Q network
         DQN.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
             
-        if done: 
+        if done:
+            # Collect the total reward of the episode
+            rewards.append(episode_reward)
+
             # Reset the episode reward
             episode_reward = 0
         
@@ -232,6 +240,9 @@ def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None,
         else:
             # Update the state
             s = s_next
+
+            if step == budget:
+                rewards.append(episode_reward)
 
     return rewards
 
@@ -259,36 +270,95 @@ def test(args_dict):
 
     return rewards
 
+
+def episode_rewards_to_save_array(rewards):
+    """
+    Converts the episode rewards, which is a list of lists, to one single array, which can be saved by numpy
+    The 'rewards' variable contains a list for each repetition, which contains a total reward for each episode
+    """
+    rewards_per_rep_arr = []
+    for repetition in rewards:
+        # Use a 0 as a delimiter between repetitions
+        rewards_per_rep_arr += repetition + [0]
+    rewards_per_rep_arr = np.array(rewards_per_rep_arr, dtype=np.float32)
+    return rewards_per_rep_arr
+
+
+def saved_array_to_plot_array(save_array, budget=10000):
+    """
+    Convert a saved result into an array that can be plotted.
+    """
+    rewards_array = np.empty((0, budget))
+    rep = np.empty(0)
+    for i in save_array:
+        # A value of 0 indicates the end of a repetition
+        if i == 0:
+            rewards_array = np.append(rewards_array, rep[None, ...], axis=0)
+            rep = np.empty(0)
+        else:
+            # Turn the episode reward into a range and append to the repetition array
+            rep = np.append(rep, np.arange(1, i + 1), axis=0)
+    return rewards_array
+
+
+def select_runs(save_dir, budget=10000, **kwargs):
+    """
+    Select all runs in a save dir that satisfy the conditions given by the kwargs.
+    """
+    all_run_paths = glob.glob(os.path.join(save_dir, '*'))
+    for key in kwargs:
+        for run_path in all_run_paths:
+            if f'{key}={kwargs[key]}' not in run_path:
+                all_run_paths.remove(run_path)
+    arrays = []
+    for run_path in all_run_paths:
+        save_array = np.load(run_path)
+        arrays.append(saved_array_to_plot_array(save_array, budget))
+    return arrays
+
+
 def read_arguments():
-    
     parser = argparse.ArgumentParser()
 
     # All arguments to expect
     parser.add_argument('--experience_replay', nargs='?', const=True, default=False, help='Use experience replay')
+    parser.add_argument('--buffer_size', nargs='?', type=int, default=100, help='Size of the experience replay buffer')
 
     parser.add_argument('--target_network', nargs='?', const=True, default=False, help='Use target network')
-    parser.add_argument('--target_update_step', nargs='?', type=int, default=50, help='Number of steps between updates of target network')
-    
-    parser.add_argument('--budget', nargs='?', type=int, default=10000, help='Total number of steps')
-    parser.add_argument('--n_repetitions', nargs='?', type=int, default=10, help='Number of repetitions')
+    parser.add_argument('--target_update_step', nargs='?', type=int, default=50,
+                        help='Number of steps between updates of target network')
+
+    parser.add_argument('--budget', nargs='?', type=int, default=100, help='Total number of steps')
+    parser.add_argument('--n_repetitions', nargs='?', type=int, default=4, help='Number of repetitions')
     parser.add_argument('--n_cores', nargs='?', type=int, default=4, help='Number of cores to divide repetitions over')
-    
+
     parser.add_argument('--policy', nargs='?', type=str, default='egreedy', help='Policy to use (egreedy/softmax)')
     parser.add_argument('--epsilon', nargs='?', type=float, default=0.2, help='Epsilon exploration parameter')
     parser.add_argument('--temp', nargs='?', type=float, default=1, help='Tau (temperature) exploration parameter')
-    
+
     parser.add_argument('--with_decay', nargs='?', const=True, default=False, help='Use decaying exploration parameter')
 
     parser.add_argument('--learning_rate', nargs='?', type=float, default=0.01, help='Learing rate')
-    
+
+    parser.add_argument('--architecture', nargs='?', type=str, default='32', help='Shape(s) of the hidden layer(s)')
+
     # Read the arguments in the command line
     args = parser.parse_args()
-    
-    args_dict = vars(args) # Create a dictionary
-    
+
+    args_dict = vars(args)  # Create a dictionary
+
     return args_dict
 
+
 if __name__ == '__main__':
+
+    # Use 5 for loops for hyperparameter tuning
+
+    # lr = [0.01, 0.005, 0.001] (3)
+    # bs = [10, 100, 1000] (3)
+    # tus = [10, 100, 1000] (3)
+    # eps = [0.2, 0.1, 0.05] + 'with_decay', t = [10, 1, 0.1] + 'with_decay' (8)
+    # arc = ['32', '64', '32_32'] (3)
     
     print()
     args_dict = read_arguments()
@@ -303,18 +373,34 @@ if __name__ == '__main__':
     pool.close()
     pool.join()
 
+    save_arr = episode_rewards_to_save_array(rewards_per_rep)
+
     # generate the file name
-    filename = "we={}_wtn={}_lr={}_bg={}_pol={}_eps={}_temp={}_wd={}_tus={}.npy".format(args_dict['experience_replay'],
-                                                                                        args_dict['target_network'],
-                                                                                        args_dict['learning_rate'],
-                                                                                        args_dict['budget'],
-                                                                                        args_dict['policy'],
-                                                                                        args_dict['epsilon'],
-                                                                                        args_dict['temp'],
-                                                                                        args_dict['with_decay'],
-                                                                                        args_dict['target_update_step'])
-    
-    # Save an array of shape (n_repetitions, budget)
-    np.save(filename, np.array(rewards_per_rep))
-    labels = ['test dqn']
-    plot_rewards(rewards_per_rep, config_labels=labels, save_file='dqn_rewards')
+    filename = "we={}_wtn={}_lr={}_pol={}_eps={}_t={}_wd={}_tus={}_bs={}_arc={}.npy".format(args_dict['experience_replay'],
+                                                                                            args_dict['target_network'],
+                                                                                            args_dict['learning_rate'],
+                                                                                            args_dict['policy'],
+                                                                                            args_dict['epsilon'],
+                                                                                            args_dict['temp'],
+                                                                                            args_dict['with_decay'],
+                                                                                            args_dict['target_update_step'],
+                                                                                            args_dict['buffer_size'],
+                                                                                            args_dict['architecture'])
+
+    # Save the total reward of every episode of every repetition
+    results_dir = './results'
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+    path = os.path.join(results_dir, filename)
+    np.save(path, save_arr)
+
+    # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
+    mean_rewards = []
+
+    # 'selected_runs' is a list containing [n_repetitions, budget] arrays for every run with the given kwargs
+    selected_runs = select_runs(results_dir, budget=args_dict['budget'], lr=0.01)
+    mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+
+    # Plotting
+    labels = ['lr=0.01']
+    plot_rewards(mean_rewards, config_labels=labels, budget=args_dict['budget'], save_file='dqn_rewards')
