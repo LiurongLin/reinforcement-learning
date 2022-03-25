@@ -255,6 +255,8 @@ def test(args_dict):
                          with_decay=args_dict['with_decay'],
                          target_update_step=args_dict['target_update_step']
                          )
+
+
     return rewards
 
 def read_arguments():
@@ -273,7 +275,7 @@ def read_arguments():
     
     parser.add_argument('--policy', nargs='?', type=str, default='egreedy', help='Policy to use (egreedy/softmax)')
     parser.add_argument('--epsilon', nargs='?', type=float, default=0.2, help='Epsilon exploration parameter')
-    parser.add_argument('--temp', nargs='?', type=float, default=0.2, help='Tau (temperature) exploration parameter')
+    parser.add_argument('--temp', nargs='?', type=float, default=1, help='Tau (temperature) exploration parameter')
     
     parser.add_argument('--with_decay', nargs='?', const=True, default=False, help='Use decaying exploration parameter')
 
@@ -300,8 +302,19 @@ if __name__ == '__main__':
     rewards_per_rep = pool.starmap(test, params)
     pool.close()
     pool.join()
+
+    # generate the file name
+    filename = "we={}_wtn={}_lr={}_bg={}_pol={}_eps={}_temp={}_wd={}_tus={}.npy".format(args_dict['experience_replay'],
+                                                                                        args_dict['target_network'],
+                                                                                        args_dict['learning_rate'],
+                                                                                        args_dict['budget'],
+                                                                                        args_dict['policy'],
+                                                                                        args_dict['epsilon'],
+                                                                                        args_dict['temp'],
+                                                                                        args_dict['with_decay'],
+                                                                                        args_dict['target_update_step'])
     
     # Save an array of shape (n_repetitions, budget)
-    np.save('test_array.npy', np.array(rewards_per_rep))
+    np.save(filename, np.array(rewards_per_rep))
     labels = ['test dqn']
     plot_rewards(rewards_per_rep, config_labels=labels, save_file='dqn_rewards')
