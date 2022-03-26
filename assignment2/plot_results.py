@@ -64,18 +64,41 @@ if __name__ == '__main__':
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
 
-    budget = 50
+    budget = 10000
 
     # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
     mean_rewards = []
+    labels = []
 
     # 'selected_runs' is a list containing [n_repetitions, budget] arrays for every run with the given kwargs
-    selected_runs = select_runs(results_dir, budget=budget, pol='egreedy')
-    mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
 
-    # selected_runs = select_runs(results_dir, budget=budget, pol='softmax')
+    # for eps in [0.2, 0.1, 0.05]:
+    #     selected_runs = select_runs(results_dir, budget=budget, pol='egreedy', eps=eps)
+    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    #     labels.append(f'egreedy_eps={eps}')
+    #
+    # selected_runs = select_runs(results_dir, budget=budget, pol='egreedy', wd=True)
     # mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    # labels.append(f'egreedy_wd')
+    #
+    # for t in [10, 1, 0.1]:
+    #     selected_runs = select_runs(results_dir, budget=budget, pol='softmax', t=t)
+    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    #     labels.append(f'softmax_t={t}')
+    #
+    # selected_runs = select_runs(results_dir, budget=budget, pol='softmax', wd=True)
+    # mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    # labels.append(f'softmax_wd')
+
+    for bs in [50, 200, 800]:
+        selected_runs = select_runs(results_dir, budget=budget, bs=bs)
+        mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+        labels.append(f'replay buffer size={bs}')
+
+    # for tus in [50, 200, 800]:
+    #     selected_runs = select_runs(results_dir, budget=budget, tus=tus)
+    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    #     labels.append(f'target update step={tus}')
 
     # Plotting
-    labels = ['pol=egreedy']  # ['pol=egreedy', 'pol=softmax']
     plot_rewards(mean_rewards, config_labels=labels, budget=budget, save_file='dqn_rewards')
