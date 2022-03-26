@@ -3,7 +3,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import gym
 import os
-import glob
 import argparse
 from multiprocessing import Pool
 
@@ -144,32 +143,6 @@ class DQN:
         gradients = tape.gradient(loss, self.Qnet.trainable_variables)
         self.optimizer.apply_gradients(zip(gradients, self.Qnet.trainable_variables))
 
-
-def plot_rewards(rewards, config_labels, budget=10000, save_file=None):
-    steps = np.arange(budget)
-    smoothing_window = budget // 10 + 1
-    n_configs = len(config_labels)
-
-    # smooth_rewards = [smooth(r, len(rewards) // 10 + 1) for r in rewards]
-    # mean_rewards = np.mean(smooth_rewards, axis=0)
-    # std_rewards = np.std(smooth_rewards, axis=0)
-    # upper = mean_rewards + std_rewards
-    # lower = mean_rewards - std_rewards
-
-    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
-
-    for i in range(n_configs):
-        ax.plot(steps, smooth(rewards[i], smoothing_window), label=config_labels[i])
-    # ax.fill_between(steps, upper, lower, alpha=0.2)
-    ax.set_xlabel('Step')
-    ax.set_ylabel('Mean reward')
-    ax.set_title('DQN mean reward progression')
-    ax.legend()
-    if save_file is not None:
-        plt.savefig(save_file)
-    plt.show()
-    plt.close()
-
     
 def train_Qnet(env, DQN, budget=50000, policy='egreedy', epsilon=0.8, temp=None, with_decay=True, target_update_step=50):
     
@@ -284,39 +257,6 @@ def episode_rewards_to_save_array(rewards):
     return rewards_per_rep_arr
 
 
-def saved_array_to_plot_array(save_array, budget=10000):
-    """
-    Convert a saved result into an array that can be plotted.
-    """
-    rewards_array = np.empty((0, budget))
-    rep = np.empty(0)
-    for i in save_array:
-        # A value of 0 indicates the end of a repetition
-        if i == 0:
-            rewards_array = np.append(rewards_array, rep[None, ...], axis=0)
-            rep = np.empty(0)
-        else:
-            # Turn the episode reward into a range and append to the repetition array
-            rep = np.append(rep, np.arange(1, i + 1), axis=0)
-    return rewards_array
-
-
-def select_runs(save_dir, budget=10000, **kwargs):
-    """
-    Select all runs in a save dir that satisfy the conditions given by the kwargs.
-    """
-    all_run_paths = glob.glob(os.path.join(save_dir, '*'))
-    for key in kwargs:
-        for run_path in all_run_paths:
-            if f'{key}={kwargs[key]}' not in run_path:
-                all_run_paths.remove(run_path)
-    arrays = []
-    for run_path in all_run_paths:
-        save_array = np.load(run_path)
-        arrays.append(saved_array_to_plot_array(save_array, budget))
-    return arrays
-
-
 def read_arguments():
     parser = argparse.ArgumentParser()
 
@@ -328,8 +268,8 @@ def read_arguments():
     parser.add_argument('--target_update_step', nargs='?', type=int, default=50,
                         help='Number of steps between updates of target network')
 
-    parser.add_argument('--budget', nargs='?', type=int, default=100, help='Total number of steps')
-    parser.add_argument('--n_repetitions', nargs='?', type=int, default=4, help='Number of repetitions')
+    parser.add_argument('--budget', nargs='?', type=int, default=10000, help='Total number of steps')
+    parser.add_argument('--n_repetitions', nargs='?', type=int, default=8, help='Number of repetitions')
     parser.add_argument('--n_cores', nargs='?', type=int, default=4, help='Number of cores to divide repetitions over')
 
     parser.add_argument('--policy', nargs='?', type=str, default='egreedy', help='Policy to use (egreedy/softmax)')
@@ -376,16 +316,16 @@ if __name__ == '__main__':
     save_arr = episode_rewards_to_save_array(rewards_per_rep)
 
     # generate the file name
-    filename = "we={}_wtn={}_lr={}_pol={}_eps={}_t={}_wd={}_tus={}_bs={}_arc={}.npy".format(args_dict['experience_replay'],
+    filename = "we={}_wtn={}_arc={}_lr={}_tus={}_bs={}_pol={}_eps={}_t={}_wd={}.npy".format(args_dict['experience_replay'],
                                                                                             args_dict['target_network'],
+                                                                                            args_dict['architecture'],
                                                                                             args_dict['learning_rate'],
+                                                                                            args_dict['target_update_step'],
+                                                                                            args_dict['buffer_size'],
                                                                                             args_dict['policy'],
                                                                                             args_dict['epsilon'],
                                                                                             args_dict['temp'],
-                                                                                            args_dict['with_decay'],
-                                                                                            args_dict['target_update_step'],
-                                                                                            args_dict['buffer_size'],
-                                                                                            args_dict['architecture'])
+                                                                                            args_dict['with_decay'])
 
     # Save the total reward of every episode of every repetition
     results_dir = './results'
@@ -394,13 +334,3 @@ if __name__ == '__main__':
     path = os.path.join(results_dir, filename)
     np.save(path, save_arr)
 
-    # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
-    mean_rewards = []
-
-    # 'selected_runs' is a list containing [n_repetitions, budget] arrays for every run with the given kwargs
-    selected_runs = select_runs(results_dir, budget=args_dict['budget'], lr=0.01)
-    mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-
-    # Plotting
-    labels = ['lr=0.01']
-    plot_rewards(mean_rewards, config_labels=labels, budget=args_dict['budget'], save_file='dqn_rewards')
