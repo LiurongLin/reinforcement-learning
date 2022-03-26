@@ -12,7 +12,7 @@ from Helper import softmax, argmax, linear_anneal, smooth
 
 class DQN:
     def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.01, gamma=0.9, architecture='32', with_ep=True,
-                 max_replay_buffer_size=1000, replay_buffer_batch_size=64, with_target_network=True):
+                 max_replay_buffer_size=1000, replay_buffer_batch_size=50, with_target_network=True):
 
         self.state_shape = state_shape
         self.n_actions = n_actions
