@@ -10,9 +10,9 @@ n_cores=4
 arc=32
 lr=0.01
 
-for bs in 10 100 1000
+for bs in 50 200 800
 do
-  for up_step in 10 100 1000
+  for up_step in 50 200 800
   do
     for eps in 0.2 0.1 0.05
     do
