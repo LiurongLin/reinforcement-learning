@@ -47,11 +47,17 @@ def select_runs(save_dir, budget=10000, **kwargs):
     """
     all_run_paths = glob.glob(os.path.join(save_dir, '*'))
     selected_paths = []
-    for key in kwargs:
-        for run_path in all_run_paths:
+    for run_path in all_run_paths:
+        select = True
+        for key in kwargs:
             condition = f'{key}={kwargs[key]}'
-            if condition in run_path:
-                selected_paths.append(run_path)
+            if condition not in run_path:
+                select = False
+        if select:
+            selected_paths.append(run_path)
+    for i in selected_paths:
+        print(i)
+    print(' ')
     arrays = []
     for run_path in selected_paths:
         save_array = np.load(run_path)
@@ -64,7 +70,7 @@ if __name__ == '__main__':
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
 
-    budget = 10000
+    budget = 30000
 
     # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
     mean_rewards = []
@@ -90,15 +96,26 @@ if __name__ == '__main__':
     # mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
     # labels.append(f'softmax_wd')
 
-    for bs in [50, 200, 800]:
-        selected_runs = select_runs(results_dir, budget=budget, bs=bs)
-        mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-        labels.append(f'replay buffer size={bs}')
+    # for bs in [50, 200, 800]:
+    #     selected_runs = select_runs(results_dir, budget=budget, bs=bs)
+    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    #     labels.append(f'replay buffer size={bs}')
 
     # for tus in [50, 200, 800]:
     #     selected_runs = select_runs(results_dir, budget=budget, tus=tus)
     #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
     #     labels.append(f'target update step={tus}')
+
+    # for arc in ['32', '64', '32_32']:
+    #     selected_runs = select_runs(results_dir, budget=budget, arc=arc)
+    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+    #     labels.append(f'Architecture={arc}')
+
+    for lr in [0.01, 0.005, 0.001]:
+        for arc in ['32_lr', '64_lr', '32_32']:
+            selected_runs = select_runs(results_dir, budget=budget, lr=lr, arc=arc)
+            mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
+            labels.append(f'Learning rate={lr}, arc={arc}')
 
     # Plotting
     plot_rewards(mean_rewards, config_labels=labels, budget=budget, save_file='dqn_rewards')
