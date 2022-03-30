@@ -1,7 +1,7 @@
 #! /bin/sh.
 
-budget=50
-n_repetitions=4
+budget=50000
+n_repetitions=32
 n_cores=4
 
 arc=32_32
