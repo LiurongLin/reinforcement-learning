@@ -65,8 +65,9 @@ def select_runs(save_dir, **kwargs):
 
 
 if __name__ == '__main__':
-    results_dir = './hp_arc_lr_results'
+    # results_dir = './hp_arc_lr_results'
     # results_dir = './hp_pol_tus_bs_results'
+    results_dir = './results'
 
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
@@ -75,6 +76,19 @@ if __name__ == '__main__':
     mean_rewards = []
     labels = []
 
+    all_run_paths = glob.glob(os.path.join(results_dir, '*'))
+    arrays = []
+    for run_path in all_run_paths:
+        save_array = np.load(run_path)
+        arrays.append(saved_array_to_plot_array(save_array))
+        
+    for idx, run in enumerate(arrays):
+        mean_rewards.append(np.mean(run, axis=0))
+        labels.append(all_run_paths[idx].split('/')[-1].replace('.npy', ''))
+
+    plot_rewards(mean_rewards, config_labels=labels, save_file='dqn_rewards_ablation')
+    
+    '''
     # 'selected_runs' is a list containing an [n_repetitions, budget] array for every run with the given kwargs
 
     for eps in [0.2, 0.1, 0.05]:
@@ -133,3 +147,4 @@ if __name__ == '__main__':
 
     # Plotting
     plot_rewards(mean_rewards, config_labels=labels, save_file='dqn_rewards')
+    '''
