@@ -67,7 +67,9 @@ def select_runs(save_dir, **kwargs):
 if __name__ == '__main__':
     # results_dir = './hp_arc_lr_results'
     # results_dir = './hp_pol_tus_bs_results'
-    results_dir = './results'
+    results_dir = './results/'
+
+
 
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     for run_path in all_run_paths:
         save_array = np.load(run_path)
         arrays.append(saved_array_to_plot_array(save_array))
-        
+
     for idx, run in enumerate(arrays):
         mean_rewards.append(np.mean(run, axis=0))
         labels.append(all_run_paths[idx].split('/')[-1].replace('.npy', ''))
