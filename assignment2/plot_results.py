@@ -4,8 +4,10 @@ import os
 import glob
 from Helper import smooth
 
+plt.rcParams.update({'font.size': 17})
 
-def plot_rewards(rewards, config_labels, save_file=None):
+
+def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=['-'], ylim=(0,170)):
     budget = rewards[0].shape[0]
     steps = np.arange(budget)
     smoothing_window = budget // 10 + 1
@@ -14,14 +16,16 @@ def plot_rewards(rewards, config_labels, save_file=None):
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
     for i in range(n_configs):
-        ax.plot(steps, smooth(rewards[i], smoothing_window), label=config_labels[i])
+        ax.plot(steps, smooth(rewards[i], smoothing_window), linetypes[i], label=config_labels[i])
         # ax.plot(steps, rewards[i], label=config_labels[i])
     ax.set_xlabel('Step')
     ax.set_ylabel('Mean reward')
-    ax.set_title('DQN mean reward progression')
-    ax.legend()
+    ax.set_ylim(ylim)
+    ax.set_title(title)
+    ax.legend(ncol=3, fontsize=15)
+    plt.tight_layout()
     if save_file is not None:
-        plt.savefig(save_file)
+        plt.savefig(save_file, dpi=300)
     plt.show()
     plt.close()
 
@@ -63,15 +67,84 @@ def select_runs(save_dir, **kwargs):
         arrays.append(saved_array_to_plot_array(save_array))
     return arrays
 
+def plot_bs_tus_rewards(results_dir):
+    """
+    Plot the learning curves for each exploration strategy as separate figures.
+    In each figure, a line is drawn for each combination of buffer size and target network update step.
+    """
+    
+    linetypes = ['C0-', 'C1-', 'C2-', 
+                 'C0--', 'C1--', 'C2--', 
+                 'C0-.', 'C1-.', 'C2-.']
+    
+    # Run for each epsilon exploration parameter
+    for eps in [0.2, 0.1, 0.05, 'wd']:
+        
+        # Run for each combination of buffer size and target update step
+        rewards, labels = [], []
+        for bs in [50,200,800]:
+            for tus in [50,200,800]:
+                
+                # Select a specific run
+                if eps == 'wd':
+                    # Linear annealing
+                    selected_runs = select_runs(results_dir, pol='egreedy', bs=bs, tus=tus, wd=True)
+                    title = r'DQN reward progression - $\epsilon$-greedy policy (annealing $\epsilon$)'
+                    save_file = f'egreedy_wd.png'
+                else:
+                    selected_runs = select_runs(results_dir, pol='egreedy', eps=eps, bs=bs, tus=tus, wd=False)
+                    title = r'DQN reward progression - $\epsilon$-greedy policy ($\epsilon=$'+str(eps)+')'
+                    save_file = f'egreedy_eps={eps}.png'
+                
+                # Average rewards over all iterations
+                mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+                rewards.append(mean_rewards)
+                
+                # Store label for each line
+                labels.append(f'bs={bs}, tus={tus}')
+        
+        plot_rewards(rewards, config_labels=labels, save_file=save_file, linetypes=linetypes, title=title)
 
+    # Run for each temperature exploration parameter
+    for t in [10.0, 1.0, 0.1, 'wd']:
+        
+        # Run for each combination of buffer size and target update step
+        rewards, labels = [], []
+        for bs in [50,200,800]:
+            for tus in [50,200,800]:
+                
+                # Select a specific run
+                if t == 'wd':
+                    # Linear annealing
+                    selected_runs = select_runs(results_dir, pol='softmax', bs=bs, tus=tus, wd=True)
+                    title = r'DQN reward progression - softmax policy (annealing $\tau$)'
+                    save_file = f'softmax_wd.png'
+                else:
+                    selected_runs = select_runs(results_dir, pol='softmax', t=t, bs=bs, tus=tus, wd=False)
+                    title = r'DQN reward progression - softmax policy ($\tau=$'+str(t)+')'
+                    save_file = f'softmax_t={t}.png'
+                
+                # Average rewards over all iterations
+                mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+                rewards.append(mean_rewards)
+                
+                # Store label for each line
+                labels.append(f'bs={bs}, tus={tus}')
+        
+        plot_rewards(rewards, config_labels=labels, save_file=save_file, linetypes=linetypes, title=title)
+    
+    
 if __name__ == '__main__':
     # results_dir = './hp_arc_lr_results'
     # results_dir = './hp_pol_tus_bs_results'
-    results_dir = './results'
+    #results_dir = './ablation_results'
+    results_dir = './hp_pol_tus_bs_results'
 
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
 
+    plot_bs_tus_rewards(results_dir)
+    
     # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
     mean_rewards = []
     labels = []
