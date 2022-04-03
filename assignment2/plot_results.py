@@ -25,8 +25,7 @@ def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward 
         # ax.plot(steps, rewards[i], label=config_labels[i])
     ax.set_xlabel('Step')
     ax.set_ylabel('Mean reward')
-    #ax.set_ylim(ylim)
-    ax.set_ymin(0)
+    ax.set_ylim(ylim)
     ax.set_title(title)
     #ax.legend(ncol=3, fontsize=15)
     ax.legend(ncol=1, fontsize=15)
@@ -79,7 +78,6 @@ def plot_pol_bs_tus_rewards(results_dir):
     Plot the learning curves for each exploration strategy as separate figures.
     In each figure, a line is drawn for each combination of buffer size and target network update step.
     """
-    print('plot_pol_bs_tus_rewards')
     
     linetypes = ['C0-', 'C1-', 'C2-', 
                  'C0--', 'C1--', 'C2--', 
@@ -111,7 +109,8 @@ def plot_pol_bs_tus_rewards(results_dir):
                 # Store label for each line
                 labels.append(f'bs={bs}, tus={tus}')
         
-        plot_rewards(rewards, config_labels=labels, save_file=save_file, linetypes=linetypes, title=title)
+        plot_rewards(rewards, config_labels=labels, save_file=f'{results_dir}/{save_file}', 
+                     linetypes=linetypes, title=title)
 
     # Run for each temperature exploration parameter
     for t in [10.0, 1.0, 0.1, 'wd']:
@@ -139,11 +138,38 @@ def plot_pol_bs_tus_rewards(results_dir):
                 # Store label for each line
                 labels.append(f'bs={bs}, tus={tus}')
         
-        plot_rewards(rewards, config_labels=labels, save_file=save_file, linetypes=linetypes, title=title)
+        plot_rewards(rewards, config_labels=labels, save_file=f'{results_dir}/{save_file}', 
+                     linetypes=linetypes, title=title)
 
 def plot_arc_lr_rewards(results_dir):
-    print('plot_arc_lr_rewards')
-    return
+
+    linetypes = ['C0-', 'C1-', 'C2-', 
+                 'C0--', 'C1--', 'C2--', 
+                 'C0-.', 'C1-.', 'C2-.']
+    
+    rewards, labels = [], []
+    
+    # Run for each architecture
+    for arc in ['32', '64', '32_32']:
+        
+        # Run for each learning rate
+        for lr in [0.001, 0.005, 0.01]:
+            
+            # Select a specific run
+            selected_runs = select_runs(results_dir, lr=lr, arc=arc)
+
+            # Average rewards over all iterations
+            mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+            rewards.append(mean_rewards)
+
+            # Store label for each line
+            labels.append(f'lr={lr}, arc={arc}')
+
+    title = r'DQN reward progression - grid-search lr + arc'
+    save_file = f'{results_dir}/grid_search_lr_arc.png'
+    plot_rewards(rewards, config_labels=labels, save_file=save_file, 
+                 linetypes=linetypes, title=title)
+    
 
 def plot_ablation_rewards(results_dir):
     
@@ -200,93 +226,3 @@ if __name__ == '__main__':
         
     elif args_dict['figure_type'] == 'ablation':
         plot_ablation_rewards(args_dict['results_dir'])
-    
-    '''
-    # results_dir = './hp_arc_lr_results'
-    # results_dir = './hp_pol_tus_bs_results'
-    #results_dir = './ablation_results'
-    #results_dir = './hp_pol_tus_bs_results'
-    results_dir = './results'
-    
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
-
-    #plot_bs_tus_rewards(results_dir)
-    
-    # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
-    mean_rewards = []
-    labels = []
-
-    all_run_paths = glob.glob(os.path.join(results_dir, '*'))
-    arrays = []
-    for run_path in all_run_paths:
-        save_array = np.load(run_path)
-        arrays.append(saved_array_to_plot_array(save_array))
-        
-    for idx, run in enumerate(arrays):
-        mean_rewards.append(np.mean(run, axis=0))
-        labels.append(all_run_paths[idx].split('/')[-1].replace('.npy', ''))
-
-    plot_rewards(mean_rewards, config_labels=labels, save_file='dqn_rewards_ablation')
-    '''
-    
-    '''
-    # 'selected_runs' is a list containing an [n_repetitions, budget] array for every run with the given kwargs
-
-    for eps in [0.2, 0.1, 0.05]:
-        selected_runs = select_runs(results_dir, pol='egreedy', eps=eps, wd=False)
-        mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-        labels.append(f'egreedy_eps={eps}')
-
-    selected_runs = select_runs(results_dir, pol='egreedy', wd=True)
-    mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    labels.append(f'egreedy_wd')
-
-    for t in [10.0, 1.0, 0.1]:
-        selected_runs = select_runs(results_dir, pol='softmax', t=t, wd=False)
-        mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-        labels.append(f'softmax_t={t}')
-
-    selected_runs = select_runs(results_dir, pol='softmax', wd=True)
-    mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    labels.append(f'softmax_wd')
-
-    # for bs in [50, 200, 800]:
-    #     selected_runs = select_runs(results_dir, bs=bs)
-    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    #     labels.append(f'replay buffer size={bs}')
-
-    # for tus in [50, 200, 800]:
-    #     selected_runs = select_runs(results_dir, tus=tus)
-    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    #     labels.append(f'target update step={tus}')
-
-    # for arc in ['32_lr', '64_lr', '32_32']:
-    #     selected_runs = select_runs(results_dir, arc=arc)
-    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    #     labels.append(f'Architecture={arc}')
-
-    # for lr in [0.01, 0.005, 0.001]:
-    #     selected_runs = select_runs(results_dir, lr=lr)
-    #     mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    #     labels.append(f'Learning rate={lr}')
-
-    # for lr in [0.01, 0.005, 0.001]:
-    #     for arc in ['32_lr', '64_lr', '32_32']:
-    #         selected_runs = select_runs(results_dir, lr=lr, arc=arc)
-    #         mean_rewards.append(np.mean(np.concatenate(selected_runs), axis=0))
-    #         labels.append(f'Learning rate={lr}, arc={arc}')
-
-    # all_run_paths = glob.glob(os.path.join(results_dir, '*'))
-    # arrays = []
-    # for run_path in all_run_paths:
-    #     save_array = np.load(run_path)
-    #     arrays.append(saved_array_to_plot_array(save_array))
-    # for idx, run in enumerate(arrays):
-    #     mean_rewards.append(np.mean(run, axis=0))
-    #     labels.append(idx)
-    #     print(idx, all_run_paths[idx])
-
-    # Plotting
-    plot_rewards(mean_rewards, config_labels=labels, save_file='dqn_rewards')
-    '''

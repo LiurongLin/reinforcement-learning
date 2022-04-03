@@ -361,27 +361,3 @@ if __name__ == '__main__':
 
     # Save the rewards to a .npy file
     save_rewards(args_dict, rewards_per_rep)
-    
-    '''
-    save_arr = episode_rewards_to_save_array(rewards_per_rep)
-
-    # generate the file name
-    filename = "we={}_wtn={}_arc={}_lr={}_tus={}_bs={}_pol={}_eps={}_t={}_wd={}.npy".format(args_dict['experience_replay'],
-                                                                                            args_dict['target_network'],
-                                                                                            args_dict['architecture'],
-                                                                                            args_dict['learning_rate'],
-                                                                                            args_dict['target_update_step'],
-                                                                                            args_dict['buffer_size'],
-                                                                                            args_dict['policy'],
-                                                                                            args_dict['epsilon'],
-                                                                                            args_dict['temp'],
-                                                                                            args_dict['with_decay'])
-
-    # Save the total reward of every episode of every repetition
-    #results_dir = './results'
-    results_dir = args_dict['results_dir']
-    if not os.path.exists(results_dir):
-        os.mkdir(results_dir)
-    path = os.path.join(results_dir, filename)
-    np.save(path, save_arr)
-    '''
