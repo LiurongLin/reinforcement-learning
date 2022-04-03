@@ -73,7 +73,7 @@ def select_runs(save_dir, **kwargs):
         arrays.append(saved_array_to_plot_array(save_array))
     return arrays
 
-def plot_pol_bs_tus_rewards(results_dir):
+def plot_pol_tus_bs_rewards(results_dir):
     """
     Plot the learning curves for each exploration strategy as separate figures.
     In each figure, a line is drawn for each combination of buffer size and target network update step.
@@ -204,7 +204,7 @@ def read_arguments():
 
     # All arguments to expect
     parser.add_argument('--results_dir', nargs='?', type=str, default='./results', help='Directory where results are saved')
-    parser.add_argument('--figure_type', nargs='?', type=str, default='pol_bs_tus', help='Type of figure to plot')
+    parser.add_argument('--figure_type', nargs='?', type=str, default='pol_tus_bs', help='Type of figure to plot')
 
     # Read the arguments in the command line
     args = parser.parse_args()
@@ -218,8 +218,8 @@ if __name__ == '__main__':
     # Read the arguments in the command line
     args_dict = read_arguments()
     
-    if args_dict['figure_type'] == 'pol_bs_tus':
-        plot_pol_bs_tus_rewards(args_dict['results_dir'])
+    if args_dict['figure_type'] == 'pol_tus_bs':
+        plot_pol_tus_bs_rewards(args_dict['results_dir'])
     
     elif args_dict['figure_type'] == 'arc_lr':
         plot_arc_lr_rewards(args_dict['results_dir'])
