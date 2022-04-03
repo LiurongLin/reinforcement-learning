@@ -138,12 +138,12 @@ if __name__ == '__main__':
     # results_dir = './hp_arc_lr_results'
     # results_dir = './hp_pol_tus_bs_results'
     #results_dir = './ablation_results'
-    results_dir = './hp_pol_tus_bs_results'
+    results_dir = './results'
 
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
 
-    plot_bs_tus_rewards(results_dir)
+    #plot_bs_tus_rewards(results_dir)
     
     # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
     mean_rewards = []
