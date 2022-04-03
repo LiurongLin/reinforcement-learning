@@ -13,7 +13,7 @@ wd=False
 bs=200
 up_step=50
 
-results_dir=./ablation_results
+results_dir=./ablation_results2
 figure_type=ablation
 
 # DQN

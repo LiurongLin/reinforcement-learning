@@ -1,15 +1,15 @@
 #! /bin/sh.
 
-budget=30000
-n_repetitions=16
-n_cores=8
+budget=1000
+n_repetitions=1
+n_cores=4
 
 bs=200
 up_step=50
 pol=egreedy
 wd=True
 
-results_dir=./hp_arc_lr_results
+results_dir=./hp_arc_lr_results2
 figure_type=arc_lr
 
 for arc in 32 64 32_32
