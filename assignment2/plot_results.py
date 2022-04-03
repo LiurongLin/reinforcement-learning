@@ -9,7 +9,8 @@ from Helper import smooth
 plt.rcParams.update({'font.size': 17})
 
 
-def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None, ylim=(0,170)):
+def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None,
+                 ylim=(0,170), show=False):
     if linetypes == None:
         linetypes = ['-']*len(rewards)
     
@@ -32,7 +33,8 @@ def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward 
     plt.tight_layout()
     if save_file is not None:
         plt.savefig(save_file, dpi=300)
-    plt.show()
+    if show:
+        plt.show()
     plt.close()
 
 
