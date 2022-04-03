@@ -2,12 +2,17 @@ import numpy as np
 import matplotlib.pyplot as plt
 import os
 import glob
+import argparse
+
 from Helper import smooth
 
 plt.rcParams.update({'font.size': 17})
 
 
-def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=['-'], ylim=(0,170)):
+def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None, ylim=(0,170)):
+    if linetypes == None:
+        linetypes = ['-']*len(rewards)
+    
     budget = rewards[0].shape[0]
     steps = np.arange(budget)
     smoothing_window = budget // 10 + 1
@@ -20,9 +25,11 @@ def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward 
         # ax.plot(steps, rewards[i], label=config_labels[i])
     ax.set_xlabel('Step')
     ax.set_ylabel('Mean reward')
-    ax.set_ylim(ylim)
+    #ax.set_ylim(ylim)
+    ax.set_ymin(0)
     ax.set_title(title)
-    ax.legend(ncol=3, fontsize=15)
+    #ax.legend(ncol=3, fontsize=15)
+    ax.legend(ncol=1, fontsize=15)
     plt.tight_layout()
     if save_file is not None:
         plt.savefig(save_file, dpi=300)
@@ -67,11 +74,12 @@ def select_runs(save_dir, **kwargs):
         arrays.append(saved_array_to_plot_array(save_array))
     return arrays
 
-def plot_bs_tus_rewards(results_dir):
+def plot_pol_bs_tus_rewards(results_dir):
     """
     Plot the learning curves for each exploration strategy as separate figures.
     In each figure, a line is drawn for each combination of buffer size and target network update step.
     """
+    print('plot_pol_bs_tus_rewards')
     
     linetypes = ['C0-', 'C1-', 'C2-', 
                  'C0--', 'C1--', 'C2--', 
@@ -132,18 +140,78 @@ def plot_bs_tus_rewards(results_dir):
                 labels.append(f'bs={bs}, tus={tus}')
         
         plot_rewards(rewards, config_labels=labels, save_file=save_file, linetypes=linetypes, title=title)
+
+def plot_arc_lr_rewards(results_dir):
+    print('plot_arc_lr_rewards')
+    return
+
+def plot_ablation_rewards(results_dir):
     
+    # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
+    mean_rewards = []
+    labels = []
+
+    all_run_paths = glob.glob(os.path.join(results_dir, '*'))
+    arrays = []
+    for run_path in all_run_paths:
+        save_array = np.load(run_path)
+        arrays.append(saved_array_to_plot_array(save_array))
+        
+    for idx, run in enumerate(arrays):
+        mean_rewards.append(np.mean(run, axis=0))
+        
+        if ('we=True' in all_run_paths[idx]) and ('wtn=True' in all_run_paths[idx]):
+            label = 'DQN'
+        elif ('we=True' in all_run_paths[idx]) and ('wtn=False' in all_run_paths[idx]):
+            label = 'DQN-TN'
+        elif ('we=False' in all_run_paths[idx]) and ('wtn=True' in all_run_paths[idx]):
+            label = 'DQN-ER'
+        elif ('we=False' in all_run_paths[idx]) and ('wtn=False' in all_run_paths[idx]):
+            label = 'DQN-TN-ER'
+        labels.append(label)
+
+    plot_rewards(mean_rewards, config_labels=labels, save_file=f'{results_dir}/dqn_rewards_ablation.png')
+
+        
+def read_arguments():
+    parser = argparse.ArgumentParser()
+
+    # All arguments to expect
+    parser.add_argument('--results_dir', nargs='?', type=str, default='./results', help='Directory where results are saved')
+    parser.add_argument('--figure_type', nargs='?', type=str, default='pol_bs_tus', help='Type of figure to plot')
+
+    # Read the arguments in the command line
+    args = parser.parse_args()
+
+    args_dict = vars(args)  # Create a dictionary
+
+    return args_dict
     
 if __name__ == '__main__':
+
+    # Read the arguments in the command line
+    args_dict = read_arguments()
+    
+    if args_dict['figure_type'] == 'pol_bs_tus':
+        plot_pol_bs_tus_rewards(args_dict['results_dir'])
+    
+    elif args_dict['figure_type'] == 'arc_lr':
+        plot_arc_lr_rewards(args_dict['results_dir'])
+        
+    elif args_dict['figure_type'] == 'ablation':
+        plot_ablation_rewards(args_dict['results_dir'])
+    
+    '''
     # results_dir = './hp_arc_lr_results'
     # results_dir = './hp_pol_tus_bs_results'
     #results_dir = './ablation_results'
-    results_dir = './hp_pol_tus_bs_results'
-
+    #results_dir = './hp_pol_tus_bs_results'
+    results_dir = './results'
+    
     if not os.path.exists(results_dir):
         os.mkdir(results_dir)
 
-    plot_bs_tus_rewards(results_dir)
+    #plot_bs_tus_rewards(results_dir)
     
     # Should contain arrays with shape [budget] which represent the mean of a certain parameter setting
     mean_rewards = []
@@ -160,6 +228,7 @@ if __name__ == '__main__':
         labels.append(all_run_paths[idx].split('/')[-1].replace('.npy', ''))
 
     plot_rewards(mean_rewards, config_labels=labels, save_file='dqn_rewards_ablation')
+    '''
     
     '''
     # 'selected_runs' is a list containing an [n_repetitions, budget] array for every run with the given kwargs
