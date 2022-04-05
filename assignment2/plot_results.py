@@ -179,7 +179,7 @@ def plot_ablation_rewards(results_dir):
     mean_rewards = []
     labels = []
 
-    all_run_paths = glob.glob(os.path.join(results_dir, '*'))
+    all_run_paths = glob.glob(os.path.join(results_dir, '*.npy'))
     arrays = []
     for run_path in all_run_paths:
         save_array = np.load(run_path)
