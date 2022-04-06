@@ -10,7 +10,7 @@ plt.rcParams.update({'font.size': 17})
 
 
 def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None,
-                 ylim=(0,170), show=False):
+                 ylim=(0,200), show=False):
     if linetypes == None:
         linetypes = ['-']*len(rewards)
     
@@ -155,7 +155,7 @@ def plot_arc_lr_rewards(results_dir):
     for arc in ['32', '64', '32_32']:
         
         # Run for each learning rate
-        for lr in [0.001, 0.005, 0.01]:
+        for lr in [0.0001, 0.001, 0.01]:
             
             # Select a specific run
             selected_runs = select_runs(results_dir, lr=lr, arc=arc)
@@ -179,7 +179,7 @@ def plot_ablation_rewards(results_dir):
     mean_rewards = []
     labels = []
 
-    all_run_paths = glob.glob(os.path.join(results_dir, '*'))
+    all_run_paths = glob.glob(os.path.join(results_dir, '*.npy'))
     arrays = []
     for run_path in all_run_paths:
         save_array = np.load(run_path)
