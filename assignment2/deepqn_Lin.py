@@ -15,8 +15,8 @@ from Helper import softmax, argmax, linear_anneal, smooth
 
 class DQN:
     def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.001, gamma=0.9,
-                 architecture='32_32', with_replay=True, max_replay_buffer_size=1000,
-                 replay_batch_size=50, with_target_network=True, target_update_step=5):
+                 with_replay=True, max_replay_buffer_size=1000,
+                 replay_batch_size=50, with_target_network=True, target_update_step=8):
 
         self.state_shape = state_shape
         self.n_actions = n_actions
@@ -63,7 +63,7 @@ class DQN:
         X = Dense(self.n_actions, activation="linear", kernel_initializer='he_uniform')(X)
 
         model = Model(inputs=X_input, outputs=X)
-        model.compile(loss="mse", optimizer=RMSprop(lr=0.00025, rho=0.95, epsilon=0.01), metrics=["accuracy"])
+        model.compile(loss="mse", optimizer=RMSprop(learning_rate=self.learning_rate, rho=0.95, epsilon=0.01), metrics=["accuracy"])
 
         model.summary()
         return model
@@ -95,31 +95,28 @@ class DQN:
 
 
 class Agent:
-    def __init__(self, DQN, episodes = 200, policy='egreedy', temp=1.0, with_decay=False, gamma = 0.95,
-                 init_exp_parameter=1.0, final_exp_parameter=0.001, final_decay_percentage=0.25):
+    def __init__(self, DQN, episodes = 500, policy = 'egreedy', gamma = 0.95):
 
         # Number of timesteps to train
         self.episodes = episodes
 
         # Exploration strategy
         self.policy = policy
-        #self.epsilon = epsilon
-        self.temp = temp
 
         #annealing epsilon parameters
         self.epsilon = 1.0  # exploration rate
         self.epsilon_min = 0.001
         self.epsilon_decay = 0.999
 
+        # annealing temp parameters
+        self.temp = 1e4  # exploration rate
+        self.temp_min = 0.5
+        self.temp_decay = 0.8
+
         #step to start learning
         self.start = 1000
         self.gamma = gamma
 
-        # Annealing exploration strategy
-        self.with_decay = with_decay
-        self.init_exp_parameter = init_exp_parameter
-        self.final_exp_parameter = final_exp_parameter
-        self.final_decay_percentage = final_decay_percentage
 
         # Add DQN to this class
         self.DQN = DQN
@@ -158,14 +155,13 @@ class Agent:
         # Determine the Q-values for state s
         Q_s = self.DQN.Qnet.predict(s_batch)
 
-        # Determine the Q-values for state
+        # Determine the Q-values for future state
         if self.DQN.with_target_network:
             Q_s_next = self.DQN.Qnet_target.predict(s_next_batch)
         else:
             Q_s_next = self.DQN.Qnet.predict(s_next_batch)
 
-        # New back-up estimate / target
-        # If done, done_batch[i]==1 so target_q=r
+
         if self.DQN.with_replay:
             for i in range (len(a_batch)):
                 if done_batch[i]:
@@ -176,7 +172,7 @@ class Agent:
                     # selection and evaluation of action is on the target Q Network
                     # Q_max = max_a' Q_target(s', a')
                     Q_s[i][a_batch[i]] = r_batch[i] + self.gamma * (np.amax(Q_s_next[i]))
-                    self.DQN.Qnet.fit(s_batch, Q_s, verbose=0)
+            self.DQN.Qnet.fit(s_batch, Q_s, verbose=0)
         else:
             if done_batch:
                 Q_s[0][a_batch] = r_batch
@@ -186,7 +182,7 @@ class Agent:
                 # selection and evaluation of action is on the target Q Network
                 # Q_max = max_a' Q_target(s', a')
                 Q_s[0][a_batch] = r_batch + self.gamma * (np.amax(Q_s_next[0]))
-                self.DQN.Qnet.fit(s_batch, Q_s, verbose=0)
+            self.DQN.Qnet.fit(s_batch, Q_s, verbose=0)
 
     def train(self, env):
 
@@ -226,20 +222,30 @@ class Agent:
                     # Sample a batch from the replay buffer
                     s_batch, a_batch, r_batch, s_next_batch, done_batch = self.DQN.sample_replay_buffer()
                 else:
-                # Reshape the data
+                    # Reshape the data
                     s_batch, a_batch, r_batch, s_next_batch, done_batch = s[None, :], np.array(a), np.array(r), \
-                                                                      s_next[None, :], np.array(done)
+                                                                                      s_next[None, :], np.array(done)
+
                 if step_all > self.start:
-                    if self.epsilon > self.epsilon_min:
-                        self.epsilon *= self.epsilon_decay
+                    if self.policy == 'egreedy':
+                        if self.epsilon > self.epsilon_min:
+                            self.epsilon *= self.epsilon_decay
+
+                    else:
+                        if self.temp > self.temp_min:
+                            self.temp *= self.temp_decay
+
                 s = s_next
-                # Update the Q network
                 step += 1
                 step_all += 1
                 if done:
-                    print("episode: {}/{}, score: {}, e: {:.2}".format(episode, self.episodes, step, self.epsilon))
+                    if self.policy == 'egreedy':
+                        print("episode: {}/{}, score: {}, e: {:.2}".format(episode, self.episodes, step, self.epsilon))
+                    else:
+                        print("episode: {}/{}, score: {}, t: {:.2}".format(episode, self.episodes, step, self.temp))
                     rewards.append(step)
-            self.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
+                # update the Q network
+                self.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
             if self.DQN.with_target_network and (episode % self.DQN.target_update_step == 0):
                 self.DQN.update_target_network()
 
@@ -250,13 +256,17 @@ class Agent:
 
 
 if __name__ == "__main__":
+    rewards_list = []
     for i in range (4):
         env = gym.make("CartPole-v1")
-        dqn = DQN(with_target_network=False, with_replay=False)
-        agent = Agent(DQN = dqn)
+        dqn = DQN(with_target_network=True, with_replay=True)
+        agent = Agent(DQN = dqn, policy = 'egreedy')
         rewards = agent.train(env)
-
-        plt.plot(smooth(rewards,4))
+        plt.plot(smooth(rewards,8), alpha = 0.25)
+        rewards_list.append(smooth(rewards,8))
+    mean_r = np.mean(rewards_list, axis = 0)
+    plt.plot(mean_r)
     plt.xlabel('Episode')
     plt.ylabel('rewards')
+    plt.savefig("+tn+er_500.png")
     plt.show()
