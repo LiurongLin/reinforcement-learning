@@ -200,7 +200,44 @@ def plot_ablation_rewards(results_dir):
 
     plot_rewards(mean_rewards, config_labels=labels, save_file=f'{results_dir}/dqn_rewards_ablation.png')
 
-        
+
+def plot_ablation_single(results_dir):
+
+    r_single = []
+    titles = []
+
+    all_run_paths = glob.glob(os.path.join(results_dir, '*.npy'))
+    arrays = []
+    for run_path in all_run_paths:
+        save_array = np.load(run_path)
+        arrays.append(saved_array_to_plot_array(save_array))
+
+    # only read the DQN and DQN-tn file, bc we want to compare these two.
+    for idx, run in enumerate(arrays):
+        if ('we=True' in all_run_paths[idx]) and ('wtn=True' in all_run_paths[idx]):
+            titles.append('DQN')
+            r_single.append(run)
+        if ('we=True' in all_run_paths[idx]) and ('wtn=False' in all_run_paths[idx]):
+            titles.append('DQN-TN')
+            r_single.append(run)
+
+    fig, ax = plt.subplots(2,1, figsize = (6,6))
+
+    for i in range (2):
+        for j in range(32):
+            # plot each individual run
+            ax[i].plot(smooth(r_single[i][j], 2001), alpha = 0.25, color = "lightcoral")
+
+        # plot the mean of all the repetitions
+        mean = np.mean(r_single[i], axis = 0)
+        ax[i].plot(smooth(mean, 2001), color = "darkcyan")
+        ax[i].set_title('{}'.format(titles[i]))
+        ax[i].set_ylim(0,300)
+        ax[i].set_xlim(0,30000)
+
+    plt.tight_layout()
+    plt.show()
+
 def read_arguments():
     parser = argparse.ArgumentParser()
 
@@ -228,3 +265,6 @@ if __name__ == '__main__':
         
     elif args_dict['figure_type'] == 'ablation':
         plot_ablation_rewards(args_dict['results_dir'])
+
+    elif args_dict['figure_type'] == 'ablation_single':
+        plot_ablation_single('./ablation_results2')
