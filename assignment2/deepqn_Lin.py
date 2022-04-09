@@ -10,28 +10,26 @@ from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.optimizers import Adam, RMSprop
 import tensorflow as tf
 
+import argparse
+from multiprocessing import Pool
+
 from Helper import softmax, argmax, linear_anneal, smooth
 
 
 class DQN:
     def __init__(self, state_shape=(4,), n_actions=2, learning_rate=0.001, gamma=0.9,
-                 with_replay=True, max_replay_buffer_size=1000,
-                 replay_batch_size=50, with_target_network=True, target_update_step=8):
+                 with_replay=True, max_replay_buffer_size=1000, budget = 30000,
+                 replay_batch_size=50, with_target_network=True, target_update_step=5):
 
         self.state_shape = state_shape
         self.n_actions = n_actions
         # self.architecture = [int(node_i) for node_i in architecture.split('_')]
         self.learning_rate = learning_rate
         self.gamma = gamma
-
+        self.budget = budget
         # Initialize the Q network
         self.Qnet = self.build_Qnet()
 
-        # Utilise Adam optimizer
-        #self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-
-        # Utilise MSE loss
-        #self.loss_function = tf.keras.losses.MSE
 
         # Experience replay
         self.with_replay = with_replay
@@ -95,7 +93,7 @@ class DQN:
 
 
 class Agent:
-    def __init__(self, DQN, episodes = 500, policy = 'egreedy', gamma = 0.95):
+    def __init__(self, DQN, episodes = 1e7, policy = 'egreedy', gamma = 0.95):
 
         # Number of timesteps to train
         self.episodes = episodes
@@ -245,28 +243,121 @@ class Agent:
                         print("episode: {}/{}, score: {}, t: {:.2}".format(episode, self.episodes, step, self.temp))
                     rewards.append(step)
                 # update the Q network
+                if step_all == self.DQN.budget:
+                    rewards.append(step)
+                    break
                 self.update(s_batch, a_batch, s_next_batch, r_batch, done_batch)
             if self.DQN.with_target_network and (episode % self.DQN.target_update_step == 0):
                 self.DQN.update_target_network()
 
             episode += 1
+            if step_all == self.DQN.budget:
+                break
 
         return rewards
 
+def test(args_dict):
+    # Create the environment
+    env = gym.make("CartPole-v1")
+
+    # Create the deep Q network
+    dqn = DQN(with_replay=args_dict['experience_replay'],
+              with_target_network=args_dict['target_network']
+              )
+
+    # print('Attributes of DQN:', dir(dqn))
+
+    # Create the agent
+    agent = Agent(DQN=dqn,
+                  policy=args_dict['policy']
+                  )
+    # print('Attributes of Agent:', dir(Agent))
+
+    # Train the DQN
+    rewards = agent.train(env)
+
+    return rewards
+
+def episode_rewards_to_save_array(rewards):
+    """
+    Converts the episode rewards, which is a list of lists, to one single array, which can be saved by numpy
+    The 'rewards' variable contains a list for each repetition, which contains a total reward for each episode
+    """
+    rewards_per_rep_arr = []
+    for repetition in rewards:
+        # Use a 0 as a delimiter between repetitions
+        rewards_per_rep_arr += repetition + [0]
+    rewards_per_rep_arr = np.array(rewards_per_rep_arr, dtype=np.float32)
+    return rewards_per_rep_arr
+
+
+def save_rewards(args_dict, rewards_per_rep):
+    save_arr = episode_rewards_to_save_array(rewards_per_rep)
+
+    # Generate the file name
+    filename = "we={}_wtn={}_pol={}.npy".format(
+        args_dict['experience_replay'],
+        args_dict['target_network'],
+        args_dict['policy'])
+    # Create the directory if it does not exist yet
+    results_dir = './results_Lin'
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+
+    # Save the total reward of every episode of every repetition
+    path = os.path.join(results_dir, filename)
+    np.save(path, save_arr)
+
+
+def read_arguments():
+    parser = argparse.ArgumentParser()
+
+    # All arguments to expect
+    parser.add_argument('--experience_replay', nargs='?', const=True, default=False, help='Use experience replay')
+    parser.add_argument('--target_network', nargs='?', const=True, default=False, help='Use target network')
+    parser.add_argument('--policy', nargs='?', type=str, default='egreedy', help='Policy to use (egreedy/softmax)')
+    parser.add_argument('--n_repetitions', nargs='?', type=int, default=4, help='Number of repetitions')
+
+
+    # Read the arguments in the command line
+    args = parser.parse_args()
+
+    args_dict = vars(args)  # Create a dictionary
+
+    return args_dict
 
 
 if __name__ == "__main__":
-    rewards_list = []
-    for i in range (4):
-        env = gym.make("CartPole-v1")
-        dqn = DQN(with_target_network=True, with_replay=True)
-        agent = Agent(DQN = dqn, policy = 'egreedy')
-        rewards = agent.train(env)
-        plt.plot(smooth(rewards,8), alpha = 0.25)
-        rewards_list.append(smooth(rewards,8))
-    mean_r = np.mean(rewards_list, axis = 0)
-    plt.plot(mean_r)
-    plt.xlabel('Episode')
-    plt.ylabel('rewards')
-    plt.savefig("+tn+er_500.png")
-    plt.show()
+    # rewards_list = []
+    # for i in range (1):
+    #     env = gym.make("CartPole-v1")
+    #     dqn = DQN(with_target_network=True, with_replay=True)
+    #     agent = Agent(DQN = dqn, policy = 'egreedy')
+    #     rewards = agent.train(env)
+    #     print(np.sum(rewards))
+    #     plt.plot(smooth(rewards,8), alpha = 0.25)
+    #     rewards_list.append(smooth(rewards,8))
+    # mean_r = np.mean(rewards_list, axis = 0)
+    # plt.plot(mean_r)
+    # plt.xlabel('Episode')
+    # plt.ylabel('rewards')
+    # plt.savefig("+tn+er_500.png")
+    # plt.show()
+    args_dict = read_arguments()
+
+    print('\nSupplied arguments:')
+    for key in args_dict.keys():
+        print(f'{key}:', args_dict[key])
+    print('\n\n')
+
+    # args_dict is placed in a list to avoid unpacking the dictionary
+    params = args_dict['n_repetitions'] * [[args_dict]]
+
+    # Run the repetitions on multiple cores
+    pool = Pool()
+    rewards_per_rep = pool.starmap(test, params)
+    pool.close()
+    pool.join()
+
+    # Save the rewards to a .npy file
+    save_rewards(args_dict, rewards_per_rep)
