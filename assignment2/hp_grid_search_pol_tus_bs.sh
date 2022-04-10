@@ -4,9 +4,6 @@ budget=10000
 n_repetitions=8
 n_cores=4
 
-# arc 32 64 32_32
-# lr 0.01 0.005 0.001
-
 arc=32
 lr=0.01
 
