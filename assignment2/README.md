@@ -5,15 +5,15 @@ This README contains instructions on how to produce the results presented in our
 
 For producing the mean reward progression for different policies, target network update stepsizes and replay buffer sizes, run 
 
-`sh hp_grid_search_pol_tus_bs.sh`.
+`bash hp_grid_search_pol_tus_bs.txt`.
 
 For producing the mean reward progression for different neural network architectures and learning rates, run
 
-`sh hp_grid_search_arc_lr.sh`.
+`bash hp_grid_search_arc_lr.txt`.
 
 For producing the results of the ablation study, run
 
-`sh ablation_study.sh`.
+`bash ablation_study.txt`.
 
 Each script will train the model for several different values of hyperparameters or model features. 
 Each script will also create its own results directory and save the episode rewards obtained during training the model.
