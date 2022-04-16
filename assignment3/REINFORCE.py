@@ -49,7 +49,36 @@ class Policy_NN:
         
         # Show the architecture of the NN
         #self.NN.summary()
+    
+    def loss(self, rewards_batch, actions_batch, states_batch):
         
+        N_traces  = len(rewards_batch)
+        len_trace = len(rewards_batch[0])
+        
+        grad = 0
+        for trace_idx in range(N_traces):
+            # Loop over each trace in batch
+            states_in_trace  = states_batch[trace_idx]
+            actions_in_trace = actions_batch[trace_idx]
+            rewards_in_trace = rewards_batch[trace_idx]
+            
+            # Predict the probabilities for each action
+            prob_s = self.NN(states_in_trace)
+            # Probabilities for chosen actions
+            prob_s_a = pi_s[actions_in_trace]
+            
+            trace_return = 0
+            for obs_idx in range(len_trace)[::-1]:
+                # Loop backwards over each observation in trace
+                trace_return = rewards_batch[trace_idx][obs_idx] + self.gamma*trace_return
+                grad += trace_return * np.log(prob_s_a[obs_idx])
+        
+        # Multiply by -1 to create a loss function
+        grad = - 1/N_traces * grad
+        
+        return grad
+                
+                        
 
 class Agent:
     def __init__(self, Policy_NN, budget=50000):
