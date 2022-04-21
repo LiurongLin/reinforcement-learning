@@ -107,17 +107,17 @@ class Policy:
             # Probabilities for chosen actions
             prob_sa = tf.reduce_sum(tf.one_hot(a_in_trace, self.n_actions)*prob_s, axis=1)
 
-            trace_return = 0
+            Q_sa = 0
             for step in range(len_trace)[::-1]:
                 # Loop backwards over each observation in trace
 
                 if self.with_bootstrap:
-                    V_s = self.critic(s_next_in_trace[step][None, ...])
+                    V_s_next = self.critic(s_next_in_trace[step][None, ...])[0, 0]
                 else:
-                    V_s = self.gamma*trace_return
+                    V_s_next = self.gamma * Q_sa
 
-                Q_sa = r_in_trace[step] + V_s
-                A_sa = Q_sa - V_s
+                Q_sa = r_in_trace[step] + V_s_next
+                A_sa = Q_sa - V_s_next
 
                 if self.with_baseline:
                     actor_loss += A_sa * tf.math.log(prob_sa[step])
@@ -132,17 +132,21 @@ class Policy:
         return actor_loss + critic_loss
 
     def update(self, s_batch, a_batch, r_batch, s_next_batch):
-    
+
+        if self.with_bootstrap:
+            train_vars = self.actor.trainable_variables + self.critic.trainable_variables
+        else:
+            train_vars = self.actor.trainable_variables
+
         with tf.GradientTape() as tape:
-            tape.watch(self.actor.trainable_variables)
-            tape.watch(self.critic.trainable_variables)
+            tape.watch(train_vars)
 
             # Calculate the loss
             loss_value = self.loss_function(s_batch, a_batch, r_batch, s_next_batch)
 
         print(' ')
-        print('loss_value', loss_value[0, 0].numpy())
-        train_vars = self.actor.trainable_variables + self.critic.trainable_variables
+        print('loss_value', loss_value.numpy())
+
         gradients = tape.gradient(loss_value, train_vars)
         self.optimizer.apply_gradients(zip(gradients, train_vars))
 
