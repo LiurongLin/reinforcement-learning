@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 class Policy:
     def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, actor_arc=(64, 64), actor_activation=None,
-                 critic_arc=(64, 64), critic_activation=None, with_bootstrap=True, with_baseline=True):
+                 critic_arc=(64, 64), critic_activation=None, n=1, with_bootstrap=False, with_baseline=True):
         
         self.state_shape = state_shape
         self.n_actions = n_actions
@@ -35,6 +35,7 @@ class Policy:
         # Initialize neural network
         self.build_actor()
         if self.with_bootstrap or self.with_baseline:
+            self.n = n
             self.build_critic()
         
         # Use Adam optimizer
@@ -86,20 +87,19 @@ class Policy:
         a = np.random.choice(self.n_actions, p=prob_s)
         return a
     
-    def loss_function(self, s_batch, a_batch, r_batch, s_next_batch):
+    def loss_function(self, s_batch, a_batch, r_batch):
 
         N_traces = len(r_batch)
 
-        actor_loss = tf.constant(0, dtype=tf.float32)
-        critic_loss = tf.constant(0, dtype=tf.float32)
+        obj = tf.constant(0, dtype=tf.float32)
+        gamma = tf.constant([self.gamma], dtype=tf.float32)
         for trace_idx in range(N_traces):
             # Loop over each trace in batch
             s_in_trace = tf.convert_to_tensor(s_batch[trace_idx])
             a_in_trace = a_batch[trace_idx]
-            r_in_trace = r_batch[trace_idx]
-            s_next_in_trace = s_next_batch[trace_idx]
+            r_in_trace = tf.convert_to_tensor(r_batch[trace_idx])
 
-            len_trace = len(r_in_trace)
+            episode_length = len(r_in_trace)
 
             # Predict the probabilities for each action
             prob_s = self.actor(s_in_trace)
@@ -107,31 +107,35 @@ class Policy:
             # Probabilities for chosen actions
             prob_sa = tf.reduce_sum(tf.one_hot(a_in_trace, self.n_actions)*prob_s, axis=1)
 
-            Q_sa = 0
-            for step in range(len_trace)[::-1]:
-                # Loop backwards over each observation in trace
+            rewards = r_in_trace * tf.pow(gamma, tf.range(episode_length, dtype=tf.float32))
+            V = self.critic(s_in_trace)[:, 0]
 
+            for t in range(episode_length - self.n):
                 if self.with_bootstrap:
-                    V_s_next = self.critic(s_next_in_trace[step][None, ...])[0, 0]
+                    V_sn = self.gamma**(t + self.n) * V[t + self.n]
+                    Q_sa = tf.reduce_sum(rewards[t:t + self.n], axis=0) + V_sn
                 else:
-                    V_s_next = self.gamma * Q_sa
+                    Q_sa = tf.reduce_sum(rewards[t:], axis=0)
 
-                Q_sa = r_in_trace[step] + V_s_next
-                A_sa = Q_sa - V_s_next
+                A_sa = Q_sa - V[t]
 
                 if self.with_baseline:
-                    actor_loss += A_sa * tf.math.log(prob_sa[step])
+                    Psi_t = A_sa
                 else:
-                    actor_loss += Q_sa * tf.math.log(prob_sa[step])
+                    Psi_t = Q_sa
 
-                critic_loss += (A_sa)**2
+                actor_obj = Psi_t * tf.math.log(prob_sa[t])
+                if self.with_bootstrap or self.with_baseline:
+                    critic_loss = A_sa**2
+                    obj += actor_obj - critic_loss
+                else:
+                    obj += actor_obj
 
         # Multiply by -1 to create a loss function
-        actor_loss = - 1/N_traces * actor_loss
-        critic_loss = - 1/N_traces * critic_loss
-        return actor_loss + critic_loss
+        loss = - 1/N_traces * obj
+        return loss
 
-    def update(self, s_batch, a_batch, r_batch, s_next_batch):
+    def update(self, s_batch, a_batch, r_batch):
 
         if self.with_bootstrap:
             train_vars = self.actor.trainable_variables + self.critic.trainable_variables
@@ -142,7 +146,7 @@ class Policy:
             tape.watch(train_vars)
 
             # Calculate the loss
-            loss_value = self.loss_function(s_batch, a_batch, r_batch, s_next_batch)
+            loss_value = self.loss_function(s_batch, a_batch, r_batch)
 
         print(' ')
         print('loss_value', loss_value.numpy())
@@ -152,7 +156,7 @@ class Policy:
 
 
 class Agent:
-    def __init__(self, Policy, budget=50000, max_len_trace=500, batch_size=50):
+    def __init__(self, Policy, budget=50000, max_len_trace=500, batch_size=5):
         
         # Number of timesteps to train
         self.budget = budget
@@ -168,14 +172,13 @@ class Agent:
 
     def get_batches(self, batch):
         
-        s_batch, a_batch, r_batch, s_next_batch = [], [], [], []
+        s_batch, a_batch, r_batch = [], [], []
         for i in range(len(batch)):
-            s_batch.append(list(np.array(batch[i])[:,0]))
-            a_batch.append(list(np.array(batch[i])[:,1]))
-            r_batch.append(list(np.array(batch[i])[:,2]))
-            s_next_batch.append(list(np.array(batch[i])[:,3]))
+            s_batch.append(list(np.array(batch[i])[:, 0]))
+            a_batch.append(list(np.array(batch[i])[:, 1]))
+            r_batch.append(list(np.array(batch[i])[:, 2]))
 
-        return s_batch, a_batch, r_batch, s_next_batch
+        return s_batch, a_batch, r_batch
     
     def train(self, env):
         
@@ -197,7 +200,7 @@ class Agent:
             pbar.update(1)
             
             # Select an action using the policy
-            a = self.Policy.select_action(s[None,:])
+            a = self.Policy.select_action(s[None, :])
             
             # Simulate the environment
             s_next, r, done, info = env.step(a)
@@ -215,24 +218,30 @@ class Agent:
                 # Store trace in batch and clear trace
                 batch.append(trace)
                 trace = []
+            else:
+                s = s_next
                 
             if len(batch) == self.batch_size:
                 # Sufficient traces stored, apply update
                 
                 # Create batch arrays
-                s_batch, a_batch, r_batch, s_next_batch = self.get_batches(batch)
+                s_batch, a_batch, r_batch = self.get_batches(batch)
                 
                 # Apply update
-                self.Policy.update(s_batch, a_batch, r_batch, s_next_batch)
+                self.Policy.update(s_batch, a_batch, r_batch)
                 
                 # Record the total reward for each trace
                 r_batch_sum = [np.sum(r_batch_i) for r_batch_i in r_batch]
                 # Average over the traces
                 rewards.append(np.mean(r_batch_sum))
                 print(f'Average reward of previous {self.batch_size} traces: {rewards[-1]}')
+                print(' ')
                 
                 # Clear the batch
                 batch = []
+
+        plt.plot(rewards)
+        plt.show()
                 
 
 if __name__ == '__main__':
