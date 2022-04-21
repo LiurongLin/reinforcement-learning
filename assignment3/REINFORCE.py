@@ -5,52 +5,79 @@ import gym
 import os
 import argparse
 from multiprocessing import Pool
-
 from tqdm import tqdm
 
+
 class Policy:
-    def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, arc=[64,64], 
-                 activation=None):
+    def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, actor_arc=(64, 64), actor_activation=None,
+                 critic_arc=(64, 64), critic_activation=None, with_bootstrap=True, with_baseline=True):
         
         self.state_shape = state_shape
         self.n_actions = n_actions
         
         self.gamma = gamma
         self.lr  = lr
-        self.arc = arc
-        if activation is None:
-            self.activation = ['relu']*len(self.arc)
+        self.actor_arc = actor_arc
+        if actor_activation is None:
+            self.actor_activation = ['relu']*len(self.actor_arc)
         else:
-            self.activation = activation
+            self.actor_activation = actor_activation
+
+        self.critic_arc = critic_arc
+        if actor_activation is None:
+            self.critic_activation = ['relu'] * len(self.critic_arc)
+        else:
+            self.critic_activation = critic_activation
+
+        self.with_bootstrap = with_bootstrap
+        self.with_baseline = with_baseline
         
         # Initialize neural network
-        self.build_NN()
+        self.build_actor()
+        if self.with_bootstrap or self.with_baseline:
+            self.build_critic()
         
         # Use Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr)
    
-    def build_NN(self):
-        
+    def build_actor(self):
         # Initialize neural network
-        self.NN = tf.keras.Sequential()
+        self.actor = tf.keras.Sequential()
         
         # Input layer with shape (4,)
-        self.NN.add(tf.keras.Input(shape=self.state_shape))
+        self.actor.add(tf.keras.Input(shape=self.state_shape))
         
         # Densely-connected layers
-        for nodes_i, activation_i in zip(self.arc, self.activation):
-            self.NN.add(tf.keras.layers.Dense(nodes_i, activation=activation_i))
+        for nodes_i, activation_i in zip(self.actor_arc, self.actor_activation):
+            self.actor.add(tf.keras.layers.Dense(nodes_i, activation=activation_i))
         
         # Output layer with softmax activation, probability of taking each action
-        self.NN.add(tf.keras.layers.Dense(self.n_actions, activation='softmax'))
+        self.actor.add(tf.keras.layers.Dense(self.n_actions, activation='softmax'))
         
         # Show the architecture of the NN
-        self.NN.summary()
+        # self.NN.summary()
+
+    def build_critic(self):
+        # Initialize neural network
+        self.critic = tf.keras.Sequential()
+
+        # Input layer with shape (4,)
+        self.critic.add(tf.keras.Input(shape=self.state_shape))
+
+        # Densely-connected layers
+        for nodes_i, activation_i in zip(self.critic_arc, self.critic_activation):
+            self.critic.add(tf.keras.layers.Dense(nodes_i, activation=activation_i))
+
+        # Output layer with softmax activation, probability of taking each action
+        self.critic.add(tf.keras.layers.Dense(1))
+
+        # Show the architecture of the NN
+        # self.NN.summary()
     
     def select_action(self, s):
         
         # Probability of taking each action
-        prob_s = np.array(self.NN(s)).flatten()
+        prob_s = np.array(self.actor(s)).flatten()
         
         # Add some noise for exploration
         #prob_s = ...
@@ -59,45 +86,65 @@ class Policy:
         a = np.random.choice(self.n_actions, p=prob_s)
         return a
     
-    def loss_function(self, s_batch, a_batch, r_batch):
-        
+    def loss_function(self, s_batch, a_batch, r_batch, s_next_batch):
+
         N_traces = len(r_batch)
-       
-        loss = tf.constant(0, dtype=tf.float32)
+
+        actor_loss = tf.constant(0, dtype=tf.float32)
+        critic_loss = tf.constant(0, dtype=tf.float32)
         for trace_idx in range(N_traces):
             # Loop over each trace in batch
             s_in_trace = tf.convert_to_tensor(s_batch[trace_idx])
             a_in_trace = a_batch[trace_idx]
             r_in_trace = r_batch[trace_idx]
+            s_next_in_trace = s_next_batch[trace_idx]
 
             len_trace = len(r_in_trace)
-            
+
             # Predict the probabilities for each action
-            prob_s = self.NN(s_in_trace)
+            prob_s = self.actor(s_in_trace)
+
             # Probabilities for chosen actions
             prob_sa = tf.reduce_sum(tf.one_hot(a_in_trace, self.n_actions)*prob_s, axis=1)
-            
+
             trace_return = 0
-            for obs_idx in range(len_trace)[::-1]:
+            for step in range(len_trace)[::-1]:
                 # Loop backwards over each observation in trace
-                trace_return = r_in_trace[obs_idx] + self.gamma*trace_return
-                loss += trace_return * tf.math.log(prob_sa[obs_idx])
-        
+
+                if self.with_bootstrap:
+                    V_s = self.critic(s_next_in_trace[step][None, ...])
+                else:
+                    V_s = self.gamma*trace_return
+
+                Q_sa = r_in_trace[step] + V_s
+                A_sa = Q_sa - V_s
+
+                if self.with_baseline:
+                    actor_loss += A_sa * tf.math.log(prob_sa[step])
+                else:
+                    actor_loss += Q_sa * tf.math.log(prob_sa[step])
+
+                critic_loss += (A_sa)**2
+
         # Multiply by -1 to create a loss function
-        loss = - 1/N_traces * loss
-        return loss
-    
-    def update(self, s_batch, a_batch, r_batch):
+        actor_loss = - 1/N_traces * actor_loss
+        critic_loss = - 1/N_traces * critic_loss
+        return actor_loss + critic_loss
+
+    def update(self, s_batch, a_batch, r_batch, s_next_batch):
     
         with tf.GradientTape() as tape:
-            tape.watch(self.NN.trainable_variables)
-            
+            tape.watch(self.actor.trainable_variables)
+            tape.watch(self.critic.trainable_variables)
+
             # Calculate the loss
-            loss_value = self.loss_function(s_batch, a_batch, r_batch)
-        
-        # Backpropagate the gradient to the network's weights
-        gradients = tape.gradient(loss_value, self.NN.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.NN.trainable_variables))
+            loss_value = self.loss_function(s_batch, a_batch, r_batch, s_next_batch)
+
+        print(' ')
+        print('loss_value', loss_value[0, 0].numpy())
+        train_vars = self.actor.trainable_variables + self.critic.trainable_variables
+        gradients = tape.gradient(loss_value, train_vars)
+        self.optimizer.apply_gradients(zip(gradients, train_vars))
 
 
 class Agent:
@@ -117,13 +164,14 @@ class Agent:
 
     def get_batches(self, batch):
         
-        s_batch, a_batch, r_batch = [], [], []
+        s_batch, a_batch, r_batch, s_next_batch = [], [], [], []
         for i in range(len(batch)):
             s_batch.append(list(np.array(batch[i])[:,0]))
             a_batch.append(list(np.array(batch[i])[:,1]))
             r_batch.append(list(np.array(batch[i])[:,2]))
-        
-        return s_batch, a_batch, r_batch
+            s_next_batch.append(list(np.array(batch[i])[:,3]))
+
+        return s_batch, a_batch, r_batch, s_next_batch
     
     def train(self, env):
         
@@ -164,14 +212,14 @@ class Agent:
                 batch.append(trace)
                 trace = []
                 
-            if (len(batch) == self.batch_size):
+            if len(batch) == self.batch_size:
                 # Sufficient traces stored, apply update
                 
                 # Create batch arrays
-                s_batch, a_batch, r_batch = self.get_batches(batch)
+                s_batch, a_batch, r_batch, s_next_batch = self.get_batches(batch)
                 
                 # Apply update
-                self.Policy.update(s_batch, a_batch, r_batch)
+                self.Policy.update(s_batch, a_batch, r_batch, s_next_batch)
                 
                 # Record the total reward for each trace
                 r_batch_sum = [np.sum(r_batch_i) for r_batch_i in r_batch]
@@ -182,7 +230,6 @@ class Agent:
                 # Clear the batch
                 batch = []
                 
-            
 
 if __name__ == '__main__':
     
