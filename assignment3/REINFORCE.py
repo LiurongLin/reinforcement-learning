@@ -136,11 +136,10 @@ class Policy:
                 else:
                     actor_obj = Psi_t * tf.math.log(prob_sa[t])
                 
-                if self.with_bootstrap or self.with_baseline:
+                obj += actor_obj
+                if self.with_baseline:
                     critic_loss = A_sa**2
-                    obj += actor_obj - critic_loss
-                else:
-                    obj += actor_obj
+                    obj -= critic_loss
 
         # Multiply by -1 to create a loss function
         loss = - 1/N_traces * obj
