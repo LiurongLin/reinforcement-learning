@@ -251,6 +251,11 @@ class Agent:
                 # Clear the batch
                 batch = []
 
+
+        filename = "boostrap={}_baseline={}_entropy={}.npy".format(self.Policy.with_bootstrap,
+                                                                   self.Policy.with_baseline,
+                                                                   self.Policy.with_entropy)
+        np.save(filename, rewards)
         plt.plot(rewards)
         plt.show()
                 
