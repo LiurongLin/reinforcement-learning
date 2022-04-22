@@ -260,16 +260,91 @@ class Agent:
         plt.show()
                 
 
-if __name__ == '__main__':
-    
+def pool_function(args_dict):
     # Create the environment
     env = gym.make("CartPole-v1")
 
     # Create the policy class
-    policy = Policy()
+    policy = Policy(lr=args_dict['lr'], 
+                    actor_arc=args_dict['actor_arc'], 
+                    critic_arc=args_dict['critic_arc'], 
+                    n=args_dict['n_boot'], 
+                    with_bootstrap=args_dict['with_bootstrap'], 
+                    with_baseline=args_dict['with_baseline'],
+                    with_entropy=args_dict['with_entropy'],
+                    eta=args_dict['eta'],
+                   )
     
     # Create the agent class
-    agent = Agent(Policy=policy)
+    agent = Agent(Policy=policy,
+                  budget=args_dict['budget']
+                 )
     
-    print('\n'*6)
+    print('\n'*3)
     agent.train(env)
+    
+        
+def read_arguments():
+    parser = argparse.ArgumentParser()
+
+    # All arguments to expect
+    parser.add_argument('--with_bootstrap', nargs='?', const=True, default=False, 
+                        help='Use bootstrapping')
+    parser.add_argument('--n_boot', nargs='?', type=int, default=1, 
+                        help='Number of values to bootstrap over')
+    
+    parser.add_argument('--with_baseline', nargs='?', const=True, default=False, 
+                        help='Use baseline')
+    
+    parser.add_argument('--with_entropy', nargs='?', const=True, default=False, 
+                        help='Use entropy regularization')
+    parser.add_argument('--eta', nargs='?', type=float, default=0.01,
+                        help='Temperature parameter to scale the entropy regularization')
+    
+    parser.add_argument('--lr', nargs='?', type=float, default=1e-3, 
+                        help='Learning rate for Adam optimizer')
+    parser.add_argument('--actor_arc', nargs='?', type=tuple, default=(64,64), 
+                        help='Shape(s) of the hidden layer(s) for the actor network')
+    parser.add_argument('--critic_arc', nargs='?', type=tuple, default=(64,64), 
+                        help='Shape(s) of the hidden layer(s) for the critic network')
+
+    parser.add_argument('--budget', nargs='?', type=int, default=50000, 
+                        help='Total number of steps')
+    parser.add_argument('--n_repetitions', nargs='?', type=int, default=1, 
+                        help='Number of repetitions')
+    parser.add_argument('--n_cores', nargs='?', type=int, default=1, 
+                        help='Number of cores to divide repetitions over')
+    
+    parser.add_argument('--results_dir', nargs='?', type=str, default='./results', 
+                        help='Directory to store the results in')
+
+    # Read the arguments in the command line
+    args = parser.parse_args()
+
+    args_dict = vars(args)  # Create a dictionary
+
+    return args_dict
+
+
+if __name__ == '__main__':
+    
+    # Read the arguments in the command line
+    args_dict = read_arguments()
+
+    print('\nSupplied arguments:')
+    for key in args_dict.keys():
+        print(f'{key}:', args_dict[key])
+    print('\n\n')
+
+
+    # args_dict is placed in a list to avoid unpacking the dictionary
+    params = args_dict['n_repetitions'] * [[args_dict]]
+
+    # Run the repetitions on multiple cores
+    pool = Pool(args_dict['n_cores'])
+    rewards_per_rep = pool.starmap(pool_function, params)
+    pool.close()
+    pool.join()
+
+    # Save the rewards to a .npy file
+    #save_rewards(args_dict, rewards_per_rep)
