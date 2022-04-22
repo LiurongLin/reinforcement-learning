@@ -8,9 +8,10 @@ from multiprocessing import Pool
 from tqdm import tqdm
 
 
+
 class Policy:
     def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, actor_arc=(64, 64), actor_activation=None,
-                 critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=False, eta=0.01, with_bootstrap=False, with_baseline=False):
+                 critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=True, eta=0.01, with_bootstrap=True, with_baseline=True):
         
         self.state_shape = state_shape
         self.n_actions = n_actions
@@ -32,12 +33,13 @@ class Policy:
 
         self.with_bootstrap = with_bootstrap
         self.with_baseline = with_baseline
+        self.with_entropy = with_entropy
         
         # Initialize neural network
         self.build_actor()
-        if self.with_bootstrap or self.with_baseline:
-            self.n = n
-            self.build_critic()
+        self.build_critic()
+
+        self.n = n
         
         # Use Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr)
@@ -88,8 +90,8 @@ class Policy:
         a = np.random.choice(self.n_actions, p=prob_s)
         return a
         
-    def entropy(p):
-        return -np.sum(p * tf.math.log(p) / tf.math.log(2), axis=1)
+    def entropy(self, p):
+        return -tf.reduce_sum(p * tf.math.log(p) / tf.math.log(2.), axis=0)
     
     def loss_function(self, s_batch, a_batch, r_batch):
 
@@ -129,8 +131,8 @@ class Policy:
                 else:
                     Psi_t = Q_sa
                 
-                if with_entropy:
-                    actor_obj = Psi_t * tf.math.log(prob_sa[t]) + self.eta * entropy(prob_s[t])
+                if self.with_entropy:
+                    actor_obj = Psi_t * tf.math.log(prob_sa[t]) + self.eta * self.entropy(prob_s[t])
                 else:
                     actor_obj = Psi_t * tf.math.log(prob_sa[t])
                 
