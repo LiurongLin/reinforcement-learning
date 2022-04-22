@@ -116,29 +116,27 @@ class Policy:
             rewards = r_in_trace * tf.pow(gamma, tf.range(episode_length, dtype=tf.float32))
             V = self.critic(s_in_trace)[:, 0]
             
-            n = min(self.n, episode_length - 1)
+            if self.with_bootstrap):
+                n = min(self.n, episode_length - 1)
+            else:
+                n = 0
             for t in range(episode_length - n):
                 if self.with_bootstrap:
-                    V_sn = self.gamma**(t + n) * V[t + n]
-                    Q_sa = tf.reduce_sum(rewards[t:t + n], axis=0) + V_sn
+                    Q_sa = tf.reduce_sum(rewards[t:t + n], axis=0) + self.gamma**(t + n) * V[t + n]
                 else:
                     Q_sa = tf.reduce_sum(rewards[t:], axis=0)
 
-                A_sa = Q_sa - V[t]
-
+                Psi_t = Q_sa
                 if self.with_baseline:
-                    Psi_t = A_sa
-                else:
-                    Psi_t = Q_sa
+                    Psi_t -= V[t]
                 
+                actor_obj = Psi_t * tf.math.log(prob_sa[t])
                 if self.with_entropy:
-                    actor_obj = Psi_t * tf.math.log(prob_sa[t]) + self.eta * self.entropy(prob_s[t])
-                else:
-                    actor_obj = Psi_t * tf.math.log(prob_sa[t])
+                    actor_obj += self.eta * self.entropy(prob_s[t])
                 
                 obj += actor_obj
                 if self.with_baseline:
-                    critic_loss = A_sa**2
+                    critic_loss = Psi_t**2
                     obj -= critic_loss
 
         # Multiply by -1 to create a loss function
