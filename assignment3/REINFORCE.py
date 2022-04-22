@@ -10,13 +10,14 @@ from tqdm import tqdm
 
 class Policy:
     def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, actor_arc=(64, 64), actor_activation=None,
-                 critic_arc=(64, 64), critic_activation=None, n=1, with_bootstrap=False, with_baseline=True):
+                 critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=False, eta=0.01, with_bootstrap=False, with_baseline=False):
         
         self.state_shape = state_shape
         self.n_actions = n_actions
         
         self.gamma = gamma
         self.lr  = lr
+        self.eta = eta
         self.actor_arc = actor_arc
         if actor_activation is None:
             self.actor_activation = ['relu']*len(self.actor_arc)
@@ -86,6 +87,9 @@ class Policy:
         # Sample action
         a = np.random.choice(self.n_actions, p=prob_s)
         return a
+        
+    def entropy(p):
+        return -np.sum(p * tf.math.log(p) / tf.math.log(2), axis=1)
     
     def loss_function(self, s_batch, a_batch, r_batch):
 
@@ -109,11 +113,12 @@ class Policy:
 
             rewards = r_in_trace * tf.pow(gamma, tf.range(episode_length, dtype=tf.float32))
             V = self.critic(s_in_trace)[:, 0]
-
-            for t in range(episode_length - self.n):
+            
+            n = min(self.n, episode_length - 1)
+            for t in range(episode_length - n):
                 if self.with_bootstrap:
-                    V_sn = self.gamma**(t + self.n) * V[t + self.n]
-                    Q_sa = tf.reduce_sum(rewards[t:t + self.n], axis=0) + V_sn
+                    V_sn = self.gamma**(t + n) * V[t + n]
+                    Q_sa = tf.reduce_sum(rewards[t:t + n], axis=0) + V_sn
                 else:
                     Q_sa = tf.reduce_sum(rewards[t:], axis=0)
 
@@ -123,8 +128,12 @@ class Policy:
                     Psi_t = A_sa
                 else:
                     Psi_t = Q_sa
-
-                actor_obj = Psi_t * tf.math.log(prob_sa[t])
+                
+                if with_entropy:
+                    actor_obj = Psi_t * tf.math.log(prob_sa[t]) + self.eta * entropy(prob_s[t])
+                else:
+                    actor_obj = Psi_t * tf.math.log(prob_sa[t])
+                
                 if self.with_bootstrap or self.with_baseline:
                     critic_loss = A_sa**2
                     obj += actor_obj - critic_loss
