@@ -11,7 +11,7 @@ from tqdm import tqdm
 
 class Policy:
     def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.9, actor_arc=(64, 64), actor_activation=None,
-                 critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=True, eta=0.01, with_bootstrap=True, with_baseline=True):
+                 critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=False, eta=0.01, with_bootstrap=True, with_baseline=False):
         
         self.state_shape = state_shape
         self.n_actions = n_actions
