@@ -6,7 +6,7 @@ import os
 import argparse
 from multiprocessing import Pool
 from tqdm import tqdm
-
+import warnings
 
 
 class Policy:
@@ -83,9 +83,6 @@ class Policy:
         # Probability of taking each action
         prob_s = np.array(self.actor(s)).flatten()
         
-        # Add some noise for exploration
-        #prob_s = ...
-        
         # Sample action
         a = np.random.choice(self.n_actions, p=prob_s)
         return a
@@ -116,10 +113,11 @@ class Policy:
             rewards = r_in_trace * tf.pow(gamma, tf.range(episode_length, dtype=tf.float32))
             V = self.critic(s_in_trace)[:, 0]
             
-            if self.with_bootstrap):
+            if self.with_bootstrap:
                 n = min(self.n, episode_length - 1)
             else:
                 n = 0
+            
             for t in range(episode_length - n):
                 if self.with_bootstrap:
                     Q_sa = tf.reduce_sum(rewards[t:t + n], axis=0) + self.gamma**(t + n) * V[t + n]
@@ -156,15 +154,14 @@ class Policy:
             # Calculate the loss
             loss_value = self.loss_function(s_batch, a_batch, r_batch)
 
-        print(' ')
-        print('loss_value', loss_value.numpy())
-
         gradients = tape.gradient(loss_value, train_vars)
         self.optimizer.apply_gradients(zip(gradients, train_vars))
+        
+        return loss_value
 
 
 class Agent:
-    def __init__(self, Policy, budget=50000, max_len_trace=500, batch_size=5):
+    def __init__(self, Policy, budget=50000, max_len_trace=500, batch_size=50):
         
         # Number of timesteps to train
         self.budget = budget
@@ -180,11 +177,15 @@ class Agent:
 
     def get_batches(self, batch):
         
-        s_batch, a_batch, r_batch = [], [], []
-        for i in range(len(batch)):
-            s_batch.append(list(np.array(batch[i])[:, 0]))
-            a_batch.append(list(np.array(batch[i])[:, 1]))
-            r_batch.append(list(np.array(batch[i])[:, 2]))
+        with warnings.catch_warnings():
+            # Ignore ragged nested sequence warning
+            warnings.filterwarnings('ignore', category=np.VisibleDeprecationWarning)
+
+            s_batch, a_batch, r_batch = [], [], []
+            for i in range(len(batch)):
+                s_batch.append(list(np.array(batch[i])[:, 0]))
+                a_batch.append(list(np.array(batch[i])[:, 1]))
+                r_batch.append(list(np.array(batch[i])[:, 2]))
 
         return s_batch, a_batch, r_batch
     
@@ -196,6 +197,7 @@ class Agent:
 
         # Progress bar to update during while loop
         pbar = tqdm(total=self.budget)
+        pbar.set_postfix({'Average reward of batch': np.nan, 'Loss':np.nan})
 
         # Counter
         step = 0
@@ -236,25 +238,21 @@ class Agent:
                 s_batch, a_batch, r_batch = self.get_batches(batch)
                 
                 # Apply update
-                self.Policy.update(s_batch, a_batch, r_batch)
+                loss_value = self.Policy.update(s_batch, a_batch, r_batch)
                 
                 # Record the total reward for each trace
                 r_batch_sum = [np.sum(r_batch_i) for r_batch_i in r_batch]
                 # Average over the traces
                 rewards.append(np.mean(r_batch_sum))
-                print(f'Average reward of previous {self.batch_size} traces: {rewards[-1]}')
-                print(' ')
+                pbar.set_postfix({'Average reward of batch': rewards[-1], 'Loss':loss_value.numpy()})
                 
                 # Clear the batch
                 batch = []
 
-
-        filename = "boostrap={}_baseline={}_entropy={}.npy".format(self.Policy.with_bootstrap,
-                                                                   self.Policy.with_baseline,
-                                                                   self.Policy.with_entropy)
-        np.save(filename, rewards)
         plt.plot(rewards)
         plt.show()
+    
+        return rewards
                 
 
 def pool_function(args_dict):
@@ -274,11 +272,13 @@ def pool_function(args_dict):
     
     # Create the agent class
     agent = Agent(Policy=policy,
-                  budget=args_dict['budget']
+                  budget=args_dict['budget'],
+                  batch_size=args_dict['batch_size']
                  )
     
     print('\n'*3)
-    agent.train(env)
+    rewards = agent.train(env)
+    return rewards
     
         
 def read_arguments():
@@ -307,6 +307,8 @@ def read_arguments():
 
     parser.add_argument('--budget', nargs='?', type=int, default=50000, 
                         help='Total number of steps')
+    parser.add_argument('--batch_size', nargs='?', type=int, default=50, 
+                        help='Number of traces in the batch')
     parser.add_argument('--n_repetitions', nargs='?', type=int, default=1, 
                         help='Number of repetitions')
     parser.add_argument('--n_cores', nargs='?', type=int, default=1, 
@@ -323,6 +325,29 @@ def read_arguments():
     return args_dict
 
 
+def save_rewards(rewards_per_rep, args_dict):
+    
+    # Create filename and directory to save the rewards
+    filename = args_dict['results_dir'] + '/'
+    for key in args_dict.keys():
+        if key!='results_dir':
+            filename += f'{key}={args_dict[key]}_'
+    filename += '.npy'
+    
+    if not os.path.exists(args_dict['results_dir']):
+        os.mkdir(args_dict['results_dir'])
+    
+    # Convert the list-of-lists into a single array with 0s delimiting the repetitions
+    rewards_per_rep_array = []
+    for rewards in rewards_per_rep:
+        # Use a 0 as a delimiter between repetitions
+        rewards_per_rep_array += rewards + [0]
+    
+    # Save the rewards to a .npy file
+    rewards_per_rep_array = np.array(rewards_per_rep_array, dtype=np.float32)
+    np.save(filename, rewards_per_rep_array)
+    
+    
 if __name__ == '__main__':
     
     # Read the arguments in the command line
@@ -332,8 +357,7 @@ if __name__ == '__main__':
     for key in args_dict.keys():
         print(f'{key}:', args_dict[key])
     print('\n\n')
-
-
+    
     # args_dict is placed in a list to avoid unpacking the dictionary
     params = args_dict['n_repetitions'] * [[args_dict]]
 
@@ -342,6 +366,6 @@ if __name__ == '__main__':
     rewards_per_rep = pool.starmap(pool_function, params)
     pool.close()
     pool.join()
-
+    
     # Save the rewards to a .npy file
-    #save_rewards(args_dict, rewards_per_rep)
+    save_rewards(rewards_per_rep, args_dict)
