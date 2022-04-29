@@ -40,6 +40,7 @@ class Policy:
         self.build_critic()
 
         self.n = n
+        self.grad_list = []
         
         # Use Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr)
@@ -116,7 +117,7 @@ class Policy:
             rewards = r_in_trace * tf.pow(gamma, tf.range(episode_length, dtype=tf.float32))
             V = self.critic(s_in_trace)[:, 0]
             
-            if self.with_bootstrap):
+            if self.with_bootstrap:
                 n = min(self.n, episode_length - 1)
             else:
                 n = 0
@@ -160,6 +161,13 @@ class Policy:
         print('loss_value', loss_value.numpy())
 
         gradients = tape.gradient(loss_value, train_vars)
+        grads = []
+        for tensor in gradients:
+            grads.append(tf.reshape(tensor, shape=(-1)))
+        grads = tf.concat(grads, 0)
+        # print("The shape of the grads is {}".format(np.shape(grads)))
+        self.grad_list.append(grads)
+        # print("The shape of the gradient list is {}".format(np.shape(self.grad_list)))
         self.optimizer.apply_gradients(zip(gradients, train_vars))
 
 
@@ -237,7 +245,7 @@ class Agent:
                 
                 # Apply update
                 self.Policy.update(s_batch, a_batch, r_batch)
-                
+                print(np.shape(np.array(self.Policy.grad_list)))
                 # Record the total reward for each trace
                 r_batch_sum = [np.sum(r_batch_i) for r_batch_i in r_batch]
                 # Average over the traces
@@ -247,7 +255,6 @@ class Agent:
                 
                 # Clear the batch
                 batch = []
-
 
         filename = "boostrap={}_baseline={}_entropy={}.npy".format(self.Policy.with_bootstrap,
                                                                    self.Policy.with_baseline,
