@@ -162,7 +162,7 @@ class Policy:
         grads = tf.concat(grads, 0)
         # print("The shape of the grads is {}".format(np.shape(grads)))
         self.grad_list.append(grads)
-        print("The shape of the gradient list is {}".format(np.shape(self.grad_list)))
+        # print("The shape of the gradient list is {}".format(np.shape(self.grad_list)))
         self.optimizer.apply_gradients(zip(gradients, train_vars))
         
         return loss_value
@@ -227,18 +227,27 @@ class Agent:
             trace.append([s, a, r, s_next, done])
             
             # Update the reward of the current episode
-            #episode_reward += r
+            episode_reward += r
             
             if done or (len(trace) == self.max_len_trace):
                 # Reset the environment
                 s = env.reset()
+
+                # Collect the total reward of the episode
+                rewards.append(episode_reward)
+
+                # Reset the episode reward
+                episode_reward = 0
                 
                 # Store trace in batch and clear trace
                 batch.append(trace)
                 trace = []
             else:
                 s = s_next
-                
+
+                if step == self.budget:
+                    rewards.append(episode_reward)
+
             if len(batch) == self.batch_size:
                 # Sufficient traces stored, apply update
                 
@@ -251,20 +260,19 @@ class Agent:
                 # Record the total reward for each trace
                 r_batch_sum = [np.sum(r_batch_i) for r_batch_i in r_batch]
                 # Average over the traces
-                rewards.append(np.mean(r_batch_sum))
-                pbar.set_postfix({'Average reward of batch': rewards[-1], 'Loss':loss_value.numpy()})
+                pbar.set_postfix({'Average reward of batch': np.mean(r_batch_sum), 'Loss': loss_value.numpy()})
+
+                # rewards.append(np.mean(r_batch_sum))
+                # pbar.set_postfix({'Average reward of batch': rewards[-1], 'Loss':loss_value.numpy()})
                 
                 # Clear the batch
                 batch = []
 
-        var = np.var(self.Policy.grad_list, axis = 0)
-        print(var)
-        print(self.Policy.grad_list)
-        plt.hist(np.log10(var[var>0]))
-        print(np.min(var), np.max(var))
-        plt.show()
-        plt.plot(rewards)
-        plt.show()
+        # var = np.var(self.Policy.grad_list, axis=0)
+        # plt.hist(np.log10(var[var > 0]), bins=100)
+        # plt.show()
+        # plt.plot(rewards)
+        # plt.show()
     
         return rewards
                 
@@ -339,14 +347,19 @@ def read_arguments():
     return args_dict
 
 
+def get_numpy_file(args_dict):
+    filename = args_dict['results_dir'] + '/'
+    for key in args_dict.keys():
+        if key != 'results_dir':
+            filename += f'{key}={args_dict[key]}_'
+    filename += '.npy'
+    return filename
+
+
 def save_rewards(rewards_per_rep, args_dict):
     
     # Create filename and directory to save the rewards
-    filename = args_dict['results_dir'] + '/'
-    for key in args_dict.keys():
-        if key!='results_dir':
-            filename += f'{key}={args_dict[key]}_'
-    filename += '.npy'
+    filename = get_numpy_file(args_dict)
     
     if not os.path.exists(args_dict['results_dir']):
         os.mkdir(args_dict['results_dir'])
