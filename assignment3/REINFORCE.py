@@ -1,12 +1,25 @@
 import tensorflow as tf
 import numpy as np
-import matplotlib.pyplot as plt
 import gym
 import os
 import argparse
 from multiprocessing import Pool
 from tqdm import tqdm
 import warnings
+
+
+def count_trainable_variables(trainable_variables):
+    n_trainable_variables = 0
+    for tensor in trainable_variables:
+        n_tensor_variables = 1
+        for dim in tensor.get_shape():
+            n_tensor_variables *= dim
+        n_trainable_variables += n_tensor_variables
+    return n_trainable_variables
+
+
+def variance(x, x_2, n):
+    return x_2 / n - (x / n) ** 2
 
 
 class Policy:
@@ -43,7 +56,14 @@ class Policy:
         
         # Use Adam optimizer
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=self.lr)
-        self.grad_list = []
+
+        # Saving the variance
+        self.n_train_variables = count_trainable_variables(self.actor.trainable_variables)
+        if with_bootstrap or with_baseline:
+            self.n_train_variables += count_trainable_variables(self.critic.trainable_variables)
+        self.x = tf.zeros(self.n_train_variables)
+        self.x_2 = tf.zeros(self.n_train_variables)
+        self.n_batch = 0
    
     def build_actor(self):
         # Initialize neural network
@@ -144,7 +164,7 @@ class Policy:
 
     def update(self, s_batch, a_batch, r_batch):
 
-        if self.with_bootstrap:
+        if self.with_bootstrap or self.with_baseline:
             train_vars = self.actor.trainable_variables + self.critic.trainable_variables
         else:
             train_vars = self.actor.trainable_variables
@@ -156,13 +176,13 @@ class Policy:
             loss_value = self.loss_function(s_batch, a_batch, r_batch)
 
         gradients = tape.gradient(loss_value, train_vars)
-        grads = []
-        for tensor in gradients:
-            grads.append(tf.reshape(tensor, shape=(-1)))
-        grads = tf.concat(grads, 0)
-        # print("The shape of the grads is {}".format(np.shape(grads)))
-        self.grad_list.append(grads)
-        # print("The shape of the gradient list is {}".format(np.shape(self.grad_list)))
+
+        # Store gradients for variance computation
+        grads = tf.concat([tf.reshape(tensor, shape=(-1)) for tensor in gradients], 0)
+        self.x += grads
+        self.x_2 += tf.pow(grads, 2)
+        self.n_batch += 1
+
         self.optimizer.apply_gradients(zip(gradients, train_vars))
         
         return loss_value
@@ -268,13 +288,8 @@ class Agent:
                 # Clear the batch
                 batch = []
 
-        # var = np.var(self.Policy.grad_list, axis=0)
-        # plt.hist(np.log10(var[var > 0]), bins=100)
-        # plt.show()
-        # plt.plot(rewards)
-        # plt.show()
-    
-        return rewards
+        grad_var = variance(self.Policy.x.numpy(), self.Policy.x_2.numpy(), self.Policy.n_batch).tolist()
+        return rewards, grad_var
                 
 
 def pool_function(args_dict):
@@ -299,8 +314,8 @@ def pool_function(args_dict):
                  )
     
     print('\n'*3)
-    rewards = agent.train(env)
-    return rewards
+    rewards, grad_var = agent.train(env)
+    return rewards, grad_var
     
         
 def read_arguments():
@@ -327,13 +342,13 @@ def read_arguments():
     parser.add_argument('--critic_arc', nargs='?', type=tuple, default=(64,64), 
                         help='Shape(s) of the hidden layer(s) for the critic network')
 
-    parser.add_argument('--budget', nargs='?', type=int, default=50000, 
+    parser.add_argument('--budget', nargs='?', type=int, default=50000,
                         help='Total number of steps')
     parser.add_argument('--batch_size', nargs='?', type=int, default=50, 
                         help='Number of traces in the batch')
-    parser.add_argument('--n_repetitions', nargs='?', type=int, default=1, 
+    parser.add_argument('--n_repetitions', nargs='?', type=int, default=1,
                         help='Number of repetitions')
-    parser.add_argument('--n_cores', nargs='?', type=int, default=1, 
+    parser.add_argument('--n_cores', nargs='?', type=int, default=1,
                         help='Number of cores to divide repetitions over')
     
     parser.add_argument('--results_dir', nargs='?', type=str, default='./results', 
@@ -347,8 +362,11 @@ def read_arguments():
     return args_dict
 
 
-def get_numpy_file(args_dict):
-    filename = args_dict['results_dir'] + '/'
+def get_numpy_file(results_dir, args_dict):
+    if not os.path.exists(results_dir):
+        os.mkdir(results_dir)
+
+    filename = results_dir + '/'
     for key in args_dict.keys():
         if key != 'results_dir':
             filename += f'{key}={args_dict[key]}_'
@@ -356,23 +374,16 @@ def get_numpy_file(args_dict):
     return filename
 
 
-def save_rewards(rewards_per_rep, args_dict):
-    
-    # Create filename and directory to save the rewards
-    filename = get_numpy_file(args_dict)
-    
-    if not os.path.exists(args_dict['results_dir']):
-        os.mkdir(args_dict['results_dir'])
-    
+def save_results(results_per_rep, filename):
     # Convert the list-of-lists into a single array with 0s delimiting the repetitions
-    rewards_per_rep_array = []
-    for rewards in rewards_per_rep:
+    results_per_rep_array = []
+    for results in results_per_rep:
         # Use a 0 as a delimiter between repetitions
-        rewards_per_rep_array += rewards + [0]
+        results_per_rep_array += results + [-1]
     
     # Save the rewards to a .npy file
-    rewards_per_rep_array = np.array(rewards_per_rep_array, dtype=np.float32)
-    np.save(filename, rewards_per_rep_array)
+    results_per_rep_array = np.array(results_per_rep_array, dtype=np.float32)
+    np.save(filename, results_per_rep_array)
     
     
 if __name__ == '__main__':
@@ -390,9 +401,18 @@ if __name__ == '__main__':
 
     # Run the repetitions on multiple cores
     pool = Pool(args_dict['n_cores'])
-    rewards_per_rep = pool.starmap(pool_function, params)
+    results_per_rep = pool.starmap(pool_function, params)
     pool.close()
     pool.join()
+
+    rewards_per_rep = [results_per_rep[i][0] for i in range(len(results_per_rep))]
+    grad_vars_per_rep = [results_per_rep[i][1] for i in range(len(results_per_rep))]
+
+    # Create filename and directory to save the rewards
+    rewards_filename = get_numpy_file(args_dict['results_dir'], args_dict)
     
     # Save the rewards to a .npy file
-    save_rewards(rewards_per_rep, args_dict)
+    save_results(rewards_per_rep, rewards_filename)
+
+    grad_vars_filename = get_numpy_file(os.path.join(args_dict['results_dir'], 'grad_vars'), args_dict)
+    save_results(grad_vars_per_rep, grad_vars_filename)

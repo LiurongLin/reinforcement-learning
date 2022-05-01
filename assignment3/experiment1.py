@@ -1,5 +1,5 @@
 from multiprocessing import Pool
-from REINFORCE import pool_function, save_rewards
+from REINFORCE import pool_function, save_results, get_numpy_file
 
 for lr in [1e-2, 1e-3, 1e-4]:
     for batch_size in [1, 10, 30, 50]:
@@ -22,9 +22,14 @@ for lr in [1e-2, 1e-3, 1e-4]:
 
         # Run the repetitions on multiple cores
         pool = Pool(args_dict['n_cores'])
-        rewards_per_rep = pool.starmap(pool_function, params)
+        results_per_rep = pool.starmap(pool_function, params)
         pool.close()
         pool.join()
 
+        rewards_per_rep = [results_per_rep[i][0] for i in range(len(results_per_rep))]
+
+        # Create filename and directory to save the rewards
+        rewards_filename = get_numpy_file(args_dict['results_dir'], args_dict)
+
         # Save the rewards to a .npy file
-        save_rewards(rewards_per_rep, args_dict)
+        save_results(rewards_per_rep, rewards_filename)
