@@ -133,7 +133,7 @@ def plot_results_exp2(results_dir):
 
                 # Average rewards over all iterations
                 mean_grad_vars = np.mean(np.concatenate(grad_vars), axis=0)
-                mean_grad_vars_per_config.append(mean_grad_vars)
+                mean_grad_vars_per_config.append(mean_grad_vars[:4610])  # only use the actor grad_vars
 
                 # Store label for each line
                 if n != 0:
@@ -178,12 +178,12 @@ def plot_grad_vars(grad_vars, config_labels, save_file=None, title='DQN mean rew
     for i in range(n_configs):
         var = np.array(grad_vars[i])
         var = np.log10(var[var > 0])
-        ax.hist(var, bins=20, density=True, histtype='step', linestyle=linetypes[i], label=config_labels[i])
+        ax.hist(var, bins=40, density=True, histtype='step', linestyle=linetypes[i], label=config_labels[i])
     ax.set_xlabel('log(gradient)')
     ax.set_ylabel('density')
     ax.set_title(title)
-    ax.set_xlim(-12, 2)
-    ax.set_ylim(0, 1)
+    ax.set_xlim(-8, 8)
+    ax.set_ylim(0, 2.0)
     ax.legend(loc='upper left', ncol=1, fontsize=15)
     plt.tight_layout()
     if save_file is not None:
