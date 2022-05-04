@@ -61,6 +61,25 @@ def saved_array_to_plot_array(save_array):
     return np.array(rep_rewards)
 
 
+def saved_array_to_plot_array_L(save_array):
+    """
+        Convert a saved result into an array with repeated elements.
+    """
+    end = np.where(save_array == -1)[0]
+    #end = np.insert(end, 8, )
+    rep_rewards = []
+    for i in range(8):
+        if i == 0:
+            rewards = save_array[0:end[i]]
+        else:
+            rewards = save_array[end[i-1]+1:end[i]]
+        rewards = rewards.astype("int64")
+
+        rep_rewards.append(np.repeat(rewards,rewards))
+        print(f"Complete {i+1} repetitions")
+    return rep_rewards
+
+
 def select_runs(save_dir, grad_vars=False, **kwargs):
     """
     Select all runs in a save dir that satisfy the conditions given by the kwargs.
@@ -82,7 +101,7 @@ def select_runs(save_dir, grad_vars=False, **kwargs):
         if grad_vars:
             arrays.append(save_array.reshape((8, -1))[:, :-1])
         else:
-            arrays.append(saved_array_to_plot_array(save_array))
+            arrays.append(saved_array_to_plot_array_L(save_array))
     return arrays
 
 
@@ -166,6 +185,20 @@ def plot_results_exp2(results_dir):
                      save_file=os.path.join(results_dir, save_file), linetypes=linetypes, title=title)
 
 
+def plot_single_exp2(results_dir, wba, wen, wbo, n):
+    rewards = select_runs(results_dir, n_boot=n, with_baseline=wba, with_bootstrap=wbo,
+                          with_entropy=wen)
+
+    fig, ax = plt.subplots(1, 1, figsize=(12, 8))
+    selected_ind = np.arange(0, 1000000, 100)
+    selected_r = np.array(rewards)[0][:,selected_ind]
+    print(np.shape(selected_r))
+    ax.plot(selected_r)
+    ax.set_xlabel("budget")
+    ax.set_ylabel("rewards")
+    plt.savefig("single_wba_wen_wbo_50.png", dpi = 300)
+
+
 def plot_grad_vars(grad_vars, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None,
                    show=False):
     if linetypes == None:
@@ -194,9 +227,12 @@ def plot_grad_vars(grad_vars, config_labels, save_file=None, title='DQN mean rew
 
 
 
+
+
 if __name__ == '__main__':
     # results_dir = './results/experiment1'
     # plot_results_exp1(results_dir)
 
     results_dir = './results/experiment2'
     plot_results_exp2(results_dir)
+    # plot_single_exp2(results_dir, True, True, True, 50)
