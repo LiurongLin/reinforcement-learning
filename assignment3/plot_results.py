@@ -63,7 +63,7 @@ def saved_array_to_plot_array(save_array):
 
 def saved_array_to_plot_array_L(save_array):
     """
-        Convert a saved result into an array with repeated elements.
+        Convert a saved result into an array with repeated elements.add
     """
     end = np.where(save_array == -1)[0]
     #end = np.insert(end, 8, )
