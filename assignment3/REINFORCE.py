@@ -23,7 +23,7 @@ def variance(x, x_2, n):
 
 
 class Policy:
-    def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=0.98, actor_arc=(64, 64), actor_activation=None,
+    def __init__(self, state_shape=(4,), n_actions=2, lr=1e-3, gamma=1.0, actor_arc=(64, 64), actor_activation=None,
                  critic_arc=(64, 64), critic_activation=None, n=1, with_entropy=True, eta=0.01, with_bootstrap=True, with_baseline=True):
         
         self.state_shape = state_shape

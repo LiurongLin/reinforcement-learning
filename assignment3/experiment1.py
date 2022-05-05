@@ -11,7 +11,7 @@ for lr in [1e-2, 1e-3, 1e-4]:
                      'with_baseline': False,
                      'with_entropy': False,
                      'eta': 0.01,
-                     'budget': 1000000,
+                     'budget': 500000,
                      'batch_size': batch_size,
                      'n_repetitions': 8,
                      'n_cores': 8,

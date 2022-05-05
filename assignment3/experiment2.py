@@ -14,7 +14,7 @@ for wba in [True, False]:
                          'with_baseline': wba,
                          'with_entropy': wen,
                          'eta': 0.01,
-                         'budget': 1000000,
+                         'budget': 500000,
                          'batch_size': 10,
                          'n_repetitions': 8,
                          'n_cores': 8,

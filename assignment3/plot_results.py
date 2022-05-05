@@ -3,6 +3,7 @@ import numpy as np
 import glob
 import os
 from scipy.signal import savgol_filter
+from tqdm import tqdm
 
 plt.rcParams.update({'font.size': 17})
 
@@ -15,7 +16,7 @@ def smooth(y, window, poly=1):
 
 
 def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None,
-                 ylim=(0, 200), show=False):
+                 ylim=(0, 550), show=False):
     if linetypes == None:
         linetypes = ['-'] * len(rewards)
 
@@ -26,10 +27,10 @@ def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward 
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
 
-    for i in range(n_configs):
+    for i in tqdm(range(n_configs), desc='Smoothing rewards', total=n_configs):
         ax.plot(steps, smooth(rewards[i], smoothing_window), linetypes[i], label=config_labels[i])
     ax.set_xlabel('Step')
-    ax.set_ylabel('Mean reward')
+    ax.set_ylabel('Mean episode return')
     ax.set_ylim(ylim)
     ax.set_title(title)
     ax.legend(loc='upper left', ncol=1, fontsize=15)
@@ -75,8 +76,8 @@ def saved_array_to_plot_array_L(save_array):
             rewards = save_array[end[i-1]+1:end[i]]
         rewards = rewards.astype("int64")
 
-        rep_rewards.append(np.repeat(rewards,rewards))
-        print(f"Complete {i+1} repetitions")
+        rep_rewards.append(np.repeat(rewards, rewards))
+        # print(f"Complete {i+1} repetitions")
     return rep_rewards
 
 
@@ -96,7 +97,7 @@ def select_runs(save_dir, grad_vars=False, **kwargs):
             selected_paths.append(run_path)
     arrays = []
     for run_path in selected_paths:
-        print('path', run_path)
+        # print('path', run_path)
         save_array = np.load(run_path)
         if grad_vars:
             arrays.append(save_array.reshape((8, -1))[:, :-1])
@@ -123,8 +124,8 @@ def plot_results_exp1(results_dir):
             # Store label for each line
             labels.append(f'lr={lr}, bs={batch_size}')
 
-    title = f'REINFORCE reward progression'
-    save_file = f'experiment1.png'
+    title = f'Learning rate and batch size'
+    save_file = f'lr_bs.png'
 
     plot_rewards(rewards, config_labels=labels, save_file=f'{results_dir}/{save_file}',
                  linetypes=linetypes, title=title)
@@ -140,6 +141,7 @@ def plot_results_exp2(results_dir):
             mean_grad_vars_per_config, grad_var_labels = [], []
             for n in [0, 1, 10, 50]:
                 wbo = True if n != 0 else False
+                print(f'wba={wba}, wen={wen}, n={n}')
                 rewards = select_runs(results_dir, n_boot=n, with_baseline=wba, with_bootstrap=wbo,
                                       with_entropy=wen)
 
