@@ -167,9 +167,9 @@ def plot_results_exp2(results_dir):
             if wba and wen:
                 suffix = ' with baseline and entropy'
             elif wba and not wen:
-                suffix = ' with entropy'
-            elif wen and not wba:
                 suffix = ' with baseline'
+            elif wen and not wba:
+                suffix = ' with entropy'
             else:
                 suffix = ''
             title = 'Gradient variance of REINFORCE' + suffix
