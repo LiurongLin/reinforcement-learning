@@ -6,17 +6,17 @@ This README contains instructions on how to produce the results presented in our
 ----------------------------------------------------------------------------------------
 To produce the results of exploring plain reinforce with learning rate of [0.01, 0.001, 0.0001] and batch size of [1, 10, 30 ,50],
 
-run `experiment1.py`.
+run `python3 experiment1.py`.
 
 
 To produce the results of actor-critic with different combination of bootstrapping, baseline subtraction and entropy regulization,
 
-run `experiment2.py`. In the report we run it with learning rates 0.001 and 0.01.
+run `python3 experiment2.py`. In the report we run it with learning rates 0.001 and 0.01.
 
 
 To produce the results of hyperparameters search on n_boot = 1,
 
-run `experiment_n_boot.py`.
+run `python3 experiment_n_boot.py`.
 
 ------------------------------------------------------------------------------------------
 
