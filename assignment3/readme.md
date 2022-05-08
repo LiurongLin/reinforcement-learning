@@ -24,4 +24,4 @@ The histograms of the variances are automatically generated and stored in `resul
 
 
 
-Note: the expected runtime of each script is 6-10 hours.
+Note: the expected runtime of each experiment is 6-10 hours.
