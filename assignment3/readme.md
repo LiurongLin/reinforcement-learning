@@ -9,10 +9,10 @@ run `experiment1.py`
 To produce the results of actor-critic with different combination of bootstrapping, baseline subtraction and entropy regulization.
 run `experiment2.py`
 
-The rewards are stored as the npy files in the results/experiment1(2) folder for each configuration.
+The rewards are stored as the npy files in results/experiment1(2) folder for each configuration.
 The learning curve plots for each experiment are automatically generated and stored in results/experiment1(2) folder
 
-The gradients variances for the nueral network parameters are stored in results/experiment2/grad_vars folder
+The gradients variances for the nueral network parameters are stored as the npy files in results/experiment2/grad_vars folder
 The histograms of the variances are automatically generated and stored in results/experiment2/grad_vars folder
 
 
