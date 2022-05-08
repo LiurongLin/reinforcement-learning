@@ -11,7 +11,7 @@ run `python3 experiment1.py`.
 
 To produce the results of actor-critic with different combination of bootstrapping, baseline subtraction and entropy regulization,
 
-run `python3 experiment2.py`. In the report we run it with learning rates 0.001 and 0.01.
+run `python3 experiment2.py`. We have run this experiment with learning rates 0.001 and 0.01.
 
 
 To produce the results of hyperparameters search on n_boot = 1,
@@ -21,13 +21,19 @@ run `python3 experiment_n_boot.py`.
 ------------------------------------------------------------------------------------------
 
 
-The rewards are stored as the npy files in `results/experiment(1/2/_n_boot=1)` folder for each configuration.
+The rewards are stored as the npy files in a separate folder for each configuration. These are:
 
-The learning curve plots for each experiment are automatically generated and stored in `results/experiment(1/2/_n_boot=1)` folder.
+`results/experiment1`,
 
-The gradients variances for the nueral network parameters are stored as the npy files in `results/experiment2/grad_vars` folder.
+`results/experiment2` and
 
-The histograms of the variances are automatically generated and stored in `results/experiment2/grad_vars` folder.
+`results/experiment_n_boot=1`.
+
+The learning curve plots for each experiment are automatically generated and stored in their corresponding folder.
+
+The gradients variances for the neural network parameters are stored as the npy files in the `results/experiment2/grad_vars` folder.
+
+The histograms of the variances are automatically generated and also stored in `results/experiment2/grad_vars`.
 
 
 
