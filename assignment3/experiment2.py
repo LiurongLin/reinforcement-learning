@@ -1,5 +1,6 @@
 from multiprocessing import Pool
 from REINFORCE import pool_function, save_results, get_numpy_file
+from plot_results import plot_results_exp2
 import os
 
 for wba in [True, False]:
@@ -40,3 +41,7 @@ for wba in [True, False]:
 
             grad_vars_filename = get_numpy_file(os.path.join(args_dict['results_dir'], 'grad_vars'), args_dict)
             save_results(grad_vars_per_rep, grad_vars_filename)
+
+# Plot the results
+results_dir = './results/experiment2'
+plot_results_exp2(results_dir)

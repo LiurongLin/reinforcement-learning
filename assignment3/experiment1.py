@@ -1,5 +1,6 @@
 from multiprocessing import Pool
 from REINFORCE import pool_function, save_results, get_numpy_file
+from plot_results import plot_results_exp1
 
 for lr in [1e-2, 1e-3, 1e-4]:
     for batch_size in [1, 10, 30, 50]:
@@ -33,3 +34,7 @@ for lr in [1e-2, 1e-3, 1e-4]:
 
         # Save the rewards to a .npy file
         save_results(rewards_per_rep, rewards_filename)
+
+# Plot the results
+results_dir = './results/experiment1'
+plot_results_exp1(results_dir)

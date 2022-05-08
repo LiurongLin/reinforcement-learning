@@ -1,5 +1,6 @@
 from multiprocessing import Pool
 from REINFORCE import pool_function, save_results, get_numpy_file
+from plot_results import plot_results_exp_n_boot_1
 
 def adjust_hp(**kwargs):
     
