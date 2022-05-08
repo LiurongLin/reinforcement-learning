@@ -81,10 +81,12 @@ def saved_array_to_plot_array_L(save_array, n_repetitions):
     return rep_rewards
 
 
-def select_runs(save_dir, grad_vars=False, n_repetitions=8, **kwargs):
+def select_runs(save_dir, grad_vars=False, **kwargs):
     """
     Select all runs in a save dir that satisfy the conditions given by the kwargs.
     """
+    n_repetitions = kwargs['n_repetitions']
+    
     all_run_paths = glob.glob(os.path.join(save_dir, '*.npy'))
     selected_paths = []
     for run_path in all_run_paths:
@@ -95,6 +97,7 @@ def select_runs(save_dir, grad_vars=False, n_repetitions=8, **kwargs):
                 select = False
         if select:
             selected_paths.append(run_path)
+    
     arrays = []
     for run_path in selected_paths:
         # print('path', run_path)
@@ -144,7 +147,7 @@ def plot_results_exp2(results_dir):
         for wen in [True, False]:
             for n in [0, 1, 10, 50]:
                 wbo = True if n != 0 else False
-                print(f'wba={wba}, wen={wen}, n={n}')
+                #print(f'wba={wba}, wen={wen}, n={n}')
                 rewards = select_runs(results_dir, n_boot=n, with_baseline=wba, with_bootstrap=wbo,
                                       with_entropy=wen, n_repetitions=8)
 
@@ -239,7 +242,7 @@ def plot_results_exp_n_boot_1(results_dir_standard, results_dir):
               'en=False, critic_arc=(64,64,64)', 'en=False, critic_arc=(64,)', 'en=True, tau=0.1']
     
     selected_runs = select_runs(results_dir_standard, n_boot=1, with_entropy=False, 
-                                with_baseline=False, n_repetitions=4)
+                                with_baseline=False, n_repetitions=8)
     mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
     rewards.append(mean_rewards)
     
