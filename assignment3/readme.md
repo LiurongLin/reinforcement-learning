@@ -12,10 +12,12 @@ To produce the results of actor-critic with different combination of bootstrappi
 run `experiment2.py`.
 
 The rewards are stored as the npy files in `results/experiment1(2)` folder for each configuration.
-The learning curve plots for each experiment are automatically generated and stored in `results/experiment1(2)` folder
+\\
+The learning curve plots for each experiment are automatically generated and stored in `results/experiment1(2)` folder.
 
-The gradients variances for the nueral network parameters are stored as the npy files in `results/experiment2/grad_vars` folder
-The histograms of the variances are automatically generated and stored in `results/experiment2/grad_vars` folder
+The gradients variances for the nueral network parameters are stored as the npy files in `results/experiment2/grad_vars` folder.
+\\
+The histograms of the variances are automatically generated and stored in `results/experiment2/grad_vars` folder.
 
 
 Note: the expected runtime of each script is 6-10 hours.
