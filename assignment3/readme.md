@@ -3,7 +3,7 @@
 
 This README contains instructions on how to produce the results presented in our report.
 
-To produce the results of exploring plain reinforce with learning rate of [0.1, 0.01, 0.001, 0.0001] and batch size of [1, 10, 30 ,50]
+To produce the results of exploring plain reinforce with learning rate of [0.01, 0.001, 0.0001] and batch size of [1, 10, 30 ,50]
 
 run `experiment1.py`.
 
