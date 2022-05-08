@@ -16,13 +16,13 @@ def smooth(y, window, poly=1):
 
 
 def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward progression', linetypes=None,
-                 ylim=(0, 550), show=False):
+                 ylim=(0, 650), show=False, n_legend_cols=2):
     if linetypes == None:
         linetypes = ['-'] * len(rewards)
 
     budget = rewards[0].shape[0]
     steps = np.arange(budget)
-    smoothing_window = budget // 10 + 1
+    smoothing_window = budget // 50 + 1
     n_configs = len(config_labels)
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
@@ -33,7 +33,7 @@ def plot_rewards(rewards, config_labels, save_file=None, title='DQN mean reward 
     ax.set_ylabel('Mean episode return')
     ax.set_ylim(ylim)
     ax.set_title(title)
-    ax.legend(loc='upper left', ncol=1, fontsize=15)
+    ax.legend(loc='upper left', ncol=n_legend_cols, fontsize=15)
     plt.tight_layout()
     if save_file is not None:
         plt.savefig(save_file, dpi=300)
@@ -62,14 +62,14 @@ def saved_array_to_plot_array(save_array):
     return np.array(rep_rewards)
 
 
-def saved_array_to_plot_array_L(save_array):
+def saved_array_to_plot_array_L(save_array, n_repetitions):
     """
         Convert a saved result into an array with repeated elements.add
     """
     end = np.where(save_array == -1)[0]
     #end = np.insert(end, 8, )
     rep_rewards = []
-    for i in range(8):
+    for i in range(n_repetitions):
         if i == 0:
             rewards = save_array[0:end[i]]
         else:
@@ -81,7 +81,7 @@ def saved_array_to_plot_array_L(save_array):
     return rep_rewards
 
 
-def select_runs(save_dir, grad_vars=False, **kwargs):
+def select_runs(save_dir, grad_vars=False, n_repetitions=8, **kwargs):
     """
     Select all runs in a save dir that satisfy the conditions given by the kwargs.
     """
@@ -102,7 +102,7 @@ def select_runs(save_dir, grad_vars=False, **kwargs):
         if grad_vars:
             arrays.append(save_array.reshape((8, -1))[:, :-1])
         else:
-            arrays.append(saved_array_to_plot_array_L(save_array))
+            arrays.append(saved_array_to_plot_array_L(save_array, n_repetitions))
     return arrays
 
 
@@ -115,7 +115,7 @@ def plot_results_exp1(results_dir):
 
     for lr in [1e-2, 1e-3, 1e-4]:
         for batch_size in [1, 10, 30, 50]:
-            selected_runs = select_runs(results_dir, lr=lr, batch_size=batch_size)
+            selected_runs = select_runs(results_dir, lr=lr, batch_size=batch_size, n_repetitions=8)
 
             # Average rewards over all iterations
             mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
@@ -128,29 +128,32 @@ def plot_results_exp1(results_dir):
     save_file = f'lr_bs.png'
 
     plot_rewards(rewards, config_labels=labels, save_file=f'{results_dir}/{save_file}',
-                 linetypes=linetypes, title=title)
+                 linetypes=linetypes, title=title, n_legend_cols=3)
 
 
 def plot_results_exp2(results_dir):
-    linetypes = ['C0-', 'C0--', 'C0-.', 'C0:',
-                 'C1-', 'C1--', 'C1-.', 'C1:']
+    
+    #linetypes = ['C0-', 'C0--', 'C0-.', 'C0:',
+    #             'C1-', 'C1--', 'C1-.', 'C1:']
+    linetypes = ['C0-', 'C1-', 'C2-', 'C3-',
+                 'C0--', 'C1--', 'C2--', 'C3--']
 
     for wba in [True, False]:
         mean_rewards_per_config, reward_labels = [], []
+        mean_grad_vars_per_config, grad_var_labels = [], []
         for wen in [True, False]:
-            mean_grad_vars_per_config, grad_var_labels = [], []
             for n in [0, 1, 10, 50]:
                 wbo = True if n != 0 else False
                 print(f'wba={wba}, wen={wen}, n={n}')
                 rewards = select_runs(results_dir, n_boot=n, with_baseline=wba, with_bootstrap=wbo,
-                                      with_entropy=wen)
+                                      with_entropy=wen, n_repetitions=8)
 
                 # Average rewards over all iterations
                 mean_rewards = np.mean(np.concatenate(rewards), axis=0)
                 mean_rewards_per_config.append(mean_rewards)
 
                 grad_vars = select_runs(os.path.join(results_dir, 'grad_vars'), grad_vars=True, n_boot=n,
-                                        with_baseline=wba, with_bootstrap=wbo, with_entropy=wen)
+                                        with_baseline=wba, with_bootstrap=wbo, with_entropy=wen, n_repetitions=8)
 
                 # Average rewards over all iterations
                 mean_grad_vars = np.mean(np.concatenate(grad_vars), axis=0)
@@ -175,21 +178,23 @@ def plot_results_exp2(results_dir):
             title = 'Gradient variance of REINFORCE' + suffix
             save_file = f'experiment2_wba={wba}_wen={wen}.png'
 
-            plot_grad_vars(mean_grad_vars_per_config, config_labels=grad_var_labels,
-                           save_file=os.path.join(results_dir, 'grad_vars', save_file),
-                           title=title)
-
         wba_string = ' with baseline' if wba else ' without baseline'
         title = 'Reward progression of REINFORCE' + wba_string
         save_file = f'experiment2_wba={wba}.png'
 
+        plot_grad_vars(mean_grad_vars_per_config, config_labels=reward_labels,
+                       linetypes=linetypes, 
+                       save_file=os.path.join(results_dir, 'grad_vars', 'grad_vars_'+save_file),
+                       title='Gradient variance of REINFORCE' + wba_string)
+        
         plot_rewards(mean_rewards_per_config, config_labels=reward_labels,
-                     save_file=os.path.join(results_dir, save_file), linetypes=linetypes, title=title)
+                     save_file=os.path.join(results_dir, save_file), 
+                     linetypes=linetypes, title=title, n_legend_cols=2)
 
 
 def plot_single_exp2(results_dir, wba, wen, wbo, n):
     rewards = select_runs(results_dir, n_boot=n, with_baseline=wba, with_bootstrap=wbo,
-                          with_entropy=wen)
+                          with_entropy=wen, n_repetitions=8)
 
     fig, ax = plt.subplots(1, 1, figsize=(12, 8))
     selected_ind = np.arange(0, 1000000, 100)
@@ -213,13 +218,14 @@ def plot_grad_vars(grad_vars, config_labels, save_file=None, title='DQN mean rew
     for i in range(n_configs):
         var = np.array(grad_vars[i])
         var = np.log10(var[var > 0])
-        ax.hist(var, bins=40, density=True, histtype='step', linestyle=linetypes[i], label=config_labels[i])
+        ax.hist(var, bins=40, density=True, histtype='step', color=linetypes[i][:2], 
+                linestyle=linetypes[i][2:], label=config_labels[i])
     ax.set_xlabel('log(gradient)')
     ax.set_ylabel('density')
     ax.set_title(title)
     ax.set_xlim(-8, 8)
-    ax.set_ylim(0, 2.0)
-    ax.legend(loc='upper left', ncol=1, fontsize=15)
+    ax.set_ylim(0, 2.2)
+    ax.legend(loc='upper left', ncol=2, fontsize=15)
     plt.tight_layout()
     if save_file is not None:
         plt.savefig(save_file, dpi=300)
@@ -227,14 +233,51 @@ def plot_grad_vars(grad_vars, config_labels, save_file=None, title='DQN mean rew
         plt.show()
     plt.close()
 
+def plot_results_exp_n_boot_1(results_dir_standard, results_dir):
+    rewards = []
+    labels = ['en=False, n=1', 'en=False, lr=1e-4', 'en=False, bs=50', 
+              'en=False, critic_arc=(64,64,64)', 'en=False, critic_arc=(64,)', 'en=True, tau=0.1']
+    
+    selected_runs = select_runs(results_dir_standard, n_boot=1, with_entropy=False, 
+                                with_baseline=False, n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
+    
+    
+    results_dir = './results/experiment_n_boot=1'
+    selected_runs = select_runs(results_dir, lr=1e-4, n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
+    
+    selected_runs = select_runs(results_dir, batch_size=50, n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
+    
+    selected_runs = select_runs(results_dir, critic_arc=(64,64,64), n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
+    
+    selected_runs = select_runs(results_dir, critic_arc=(64,), n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
 
+    selected_runs = select_runs(results_dir, eta=0.1, with_entropy=True, n_repetitions=4)
+    mean_rewards = np.mean(np.concatenate(selected_runs), axis=0)
+    rewards.append(mean_rewards)
+        
+    plot_rewards(rewards, labels, title='Bootstrap n=1 experiments without baseline', 
+                 save_file=f'{results_dir}/n_boot=1_experiments.png', n_legend_cols=2)    
 
 
 
 if __name__ == '__main__':
-    # results_dir = './results/experiment1'
-    # plot_results_exp1(results_dir)
+    results_dir = './results/experiment1'
+    plot_results_exp1(results_dir)
 
     results_dir = './results/experiment2'
     plot_results_exp2(results_dir)
     # plot_single_exp2(results_dir, True, True, True, 50)
+    
+    results_dir_standard = './results/experiment2'
+    results_dir = './results/experiment_n_boot=1'
+    plot_results_exp_n_boot_1(results_dir_standard, results_dir)
