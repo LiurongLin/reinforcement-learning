@@ -3,6 +3,9 @@ from REINFORCE import pool_function, save_results, get_numpy_file
 from plot_results import plot_results_exp2
 import os
 
+if not os.path.exists('./results'):
+    os.mkdir('./results')
+
 for wba in [True, False]:
     for wen in [True, False]:
         for n in [0, 1, 10, 50]:

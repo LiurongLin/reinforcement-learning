@@ -1,6 +1,10 @@
 from multiprocessing import Pool
 from REINFORCE import pool_function, save_results, get_numpy_file
 from plot_results import plot_results_exp1
+import os
+
+if not os.path.exists('./results'):
+    os.mkdir('./results')
 
 for lr in [1e-2, 1e-3, 1e-4]:
     for batch_size in [1, 10, 30, 50]:
